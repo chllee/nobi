@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ObjectId } from 'mongodb';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireMembership } from '../middleware/auth.js';
 import { getDb } from '../lib/mongo.js';
 
 const router = Router();
@@ -34,7 +34,7 @@ async function callGemini(apiKey, systemInstruction, history, lastMessage) {
   throw lastError;
 }
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireMembership, async (req, res) => {
   if (!process.env.GEMINI_API_KEY) {
     return res.status(503).json({ error: 'Gemini API key not configured' });
   }
@@ -53,10 +53,14 @@ router.post('/', requireAuth, async (req, res) => {
 
   const db = getDb();
   const dataset = await db.collection('datasets').findOne(
-    { _id: oid, org_id: req.orgId, deleted_at: { $exists: false } },
-    { projection: { columns: 1, rows: 1, name: 1 } }
+    { _id: oid, deleted_at: { $exists: false } },
+    { projection: { columns: 1, rows: 1, name: 1, org_id: 1, department_id: 1 } }
   );
   if (!dataset) return res.status(404).json({ error: 'Dataset not found' });
+
+  if (!req.can('view', { id: dataset.department_id, org_id: dataset.org_id })) {
+    return res.status(403).json({ error: 'Not authorised to visualise this dataset' });
+  }
 
   const sampleRows = dataset.rows.slice(0, 20);
   const systemInstruction = `You are a data visualisation assistant. The user has a dataset called "${dataset.name}" with columns: ${dataset.columns.join(', ')}.

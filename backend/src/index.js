@@ -3,6 +3,11 @@ import cors from 'cors';
 import { connectMongo } from './lib/mongo.js';
 import datasetsRouter from './routes/datasets.js';
 import visualiseRouter from './routes/visualise.js';
+import organisationsRouter from './routes/organisations.js';
+import departmentsRouter from './routes/departments.js';
+import membershipsRouter from './routes/memberships.js';
+import invitationsRouter from './routes/invitations.js';
+import usersRouter from './routes/users.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,6 +19,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.use('/api/organisations', organisationsRouter);
+app.use('/api/departments', departmentsRouter);
+app.use('/api/memberships', membershipsRouter);
+app.use('/api/invitations', invitationsRouter);
+app.use('/api/users', usersRouter);
 app.use('/api/datasets', datasetsRouter);
 app.use('/api/visualise', visualiseRouter);
 

@@ -1,6 +1,13 @@
 import { supabase } from './supabase'
 
+// Cached token — updated by AuthContext so authHeaders() never calls getSession()
+// from inside an onAuthStateChange callback, which deadlocks the Supabase session lock.
+let _token = null
+export function setAuthToken(token) { _token = token }
+
 async function authHeaders() {
+  if (_token) return { Authorization: `Bearer ${_token}` }
+  // Fallback for callers outside of React (e.g. smoke tests hitting the API directly).
   const { data: { session } } = await supabase.auth.getSession()
   return session ? { Authorization: `Bearer ${session.access_token}` } : {}
 }

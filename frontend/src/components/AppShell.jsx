@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
+import { apiFetch } from '../lib/api'
 
 const Shell = styled.div`
   min-height: 100vh;
@@ -43,16 +45,19 @@ const NavItem = styled(NavLink)`
   text-decoration: none;
   border-radius: 6px;
 
-  &:hover {
-    background: #f3f4f6;
-    color: #111827;
-  }
+  &:hover { background: #f3f4f6; color: #111827; }
+  &.active { background: #f3f4f6; color: #111827; font-weight: 500; }
+`
 
-  &.active {
-    background: #f3f4f6;
-    color: #111827;
-    font-weight: 500;
-  }
+const Badge = styled.span`
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
 `
 
 const UserEmail = styled.span`
@@ -68,10 +73,7 @@ const SignOutButton = styled.button`
   cursor: pointer;
   padding: 5px 12px;
   border-radius: 6px;
-
-  &:hover {
-    background: #f3f4f6;
-  }
+  &:hover { background: #f3f4f6; }
 `
 
 const Main = styled.main`
@@ -83,7 +85,18 @@ const Main = styled.main`
 `
 
 export default function AppShell() {
-  const { user, org, signOut } = useAuth()
+  const { user, organisations, canInOrg, signOut } = useAuth()
+  const org = organisations[0]
+  const isHqAdmin = org && canInOrg('manage_departments', org.id)
+  const [pendingInvites, setPendingInvites] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch('/api/invitations/incoming')
+      .then(data => { if (!cancelled) setPendingInvites(data.length) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <Shell>
@@ -94,6 +107,11 @@ export default function AppShell() {
             <NavItem to="/" end>Dashboard</NavItem>
             <NavItem to="/datasets">Datasets</NavItem>
             <NavItem to="/visualise">Visualise</NavItem>
+            {isHqAdmin && <NavItem to="/departments">Departments</NavItem>}
+            <NavItem to="/invitations">
+              Invitations
+              {pendingInvites > 0 && <Badge>{pendingInvites}</Badge>}
+            </NavItem>
           </NavLinks>
         </NavLeft>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

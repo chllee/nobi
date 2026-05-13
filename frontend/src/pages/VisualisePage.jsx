@@ -9,15 +9,20 @@ const PageTitle = styled.h2`
   font-weight: 600;
 `
 
+const TopRow = styled.div`
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+`
+
 const Layout = styled.div`
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 24px;
   align-items: start;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  @media (max-width: 768px) { grid-template-columns: 1fr; }
 `
 
 const Panel = styled.div`
@@ -52,11 +57,6 @@ const Select = styled.select`
   font-size: 14px;
   background: #fff;
   outline: none;
-
-  &:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-  }
 `
 
 const ChatLog = styled.div`
@@ -102,15 +102,6 @@ const Textarea = styled.textarea`
   font-family: inherit;
   outline: none;
   min-height: 60px;
-
-  &:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-  }
-
-  &:disabled {
-    background: #f9fafb;
-  }
 `
 
 const SendButton = styled.button`
@@ -122,16 +113,7 @@ const SendButton = styled.button`
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  white-space: nowrap;
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background: #333;
-  }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
 `
 
 const ChartCard = styled.div`
@@ -157,7 +139,11 @@ const ErrorMsg = styled.p`
   margin: 0;
 `
 
+const ALL_DEPTS = '__all__'
+
 export default function VisualisePage() {
+  const [departments, setDepartments] = useState([])
+  const [deptFilter, setDeptFilter] = useState(ALL_DEPTS)
   const [datasets, setDatasets] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [datasetRows, setDatasetRows] = useState(null)
@@ -169,8 +155,17 @@ export default function VisualisePage() {
   const chatBottomRef = useRef(null)
 
   useEffect(() => {
-    apiFetch('/api/datasets').then(setDatasets).catch(() => {})
+    apiFetch('/api/departments').then(setDepartments).catch(() => setDepartments([]))
   }, [])
+
+  useEffect(() => {
+    const url = deptFilter === ALL_DEPTS ? '/api/datasets' : `/api/datasets?department_id=${deptFilter}`
+    apiFetch(url).then(setDatasets).catch(() => setDatasets([]))
+    setSelectedId('')
+    setMessages([])
+    setCurrentConfig(null)
+    setDatasetRows(null)
+  }, [deptFilter])
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -230,13 +225,28 @@ export default function VisualisePage() {
   return (
     <div>
       <PageTitle>Visualise</PageTitle>
+
+      <TopRow>
+        <Label style={{ marginBottom: 0 }}>Department</Label>
+        <Select
+          style={{ width: 260 }}
+          value={deptFilter}
+          onChange={e => setDeptFilter(e.target.value)}
+        >
+          <option value={ALL_DEPTS}>All departments</option>
+          {departments.map(d => (
+            <option key={d.id} value={d.id}>{d.name}{d.is_hq ? ' (HQ)' : ''}</option>
+          ))}
+        </Select>
+      </TopRow>
+
       <Layout>
         <Panel>
           <PanelBody>
             <div>
               <Label htmlFor="dataset-select">Dataset</Label>
               <Select id="dataset-select" value={selectedId} onChange={handleDatasetChange}>
-                <option value="">{noDatasets ? 'No datasets uploaded yet' : 'Select a dataset…'}</option>
+                <option value="">{noDatasets ? 'No datasets available' : 'Select a dataset…'}</option>
                 {datasets.map(d => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
@@ -259,7 +269,7 @@ export default function VisualisePage() {
 
           <InputArea>
             <Textarea
-              placeholder={selectedId ? 'Ask Claude to visualise your data… (Enter to send)' : 'Select a dataset first'}
+              placeholder={selectedId ? 'Ask to visualise your data… (Enter to send)' : 'Select a dataset first'}
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -278,8 +288,7 @@ export default function VisualisePage() {
                 {selectedId
                   ? 'Send a prompt to generate a chart'
                   : 'Select a dataset and send a prompt to get started'}
-              </Placeholder>
-          }
+              </Placeholder>}
         </ChartCard>
       </Layout>
     </div>

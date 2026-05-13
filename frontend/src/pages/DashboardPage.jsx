@@ -43,13 +43,15 @@ const StatLabel = styled.p`
 `
 
 export default function DashboardPage() {
-  const { org, role } = useAuth()
+  const { organisations, memberships } = useAuth()
+  const org = organisations[0]
   const [datasets, setDatasets] = useState(null)
 
   useEffect(() => {
     apiFetch('/api/datasets').then(setDatasets).catch(() => setDatasets([]))
   }, [])
 
+  const myDepts = memberships.map(m => m.department.name).join(', ')
   const lastUpload = datasets?.length
     ? new Date(Math.max(...datasets.map(d => new Date(d.uploaded_at))))
         .toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
@@ -58,11 +60,15 @@ export default function DashboardPage() {
   return (
     <div>
       <Heading>Welcome to {org?.name ?? '…'}</Heading>
-      <Sub>Role: {role ?? '…'}</Sub>
+      <Sub>Departments you belong to: {myDepts || '—'}</Sub>
       <StatsRow>
         <StatCard>
           <StatValue>{datasets === null ? '…' : datasets.length}</StatValue>
-          <StatLabel>Datasets</StatLabel>
+          <StatLabel>Datasets visible</StatLabel>
+        </StatCard>
+        <StatCard>
+          <StatValue>{memberships.length}</StatValue>
+          <StatLabel>Memberships</StatLabel>
         </StatCard>
         <StatCard>
           <StatValue style={{ fontSize: 18 }}>{datasets === null ? '…' : lastUpload}</StatValue>

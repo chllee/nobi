@@ -46,15 +46,15 @@
 
 ## Features In Scope (Prototype)
 
-- [ ] Organisation creation and onboarding
-- [ ] User signup / login (Supabase Auth)
-- [ ] Invitation system (DB-level, no email delivery)
-- [ ] CSV upload → parse → store in MongoDB
-- [ ] Dataset listing per org
-- [ ] Natural language prompt interface
-- [ ] LLM-driven visualisation generation (Claude API)
-- [ ] Chart rendering (Recharts)
-- [ ] Tenant isolation on all queries
+- [x] Organisation creation and onboarding
+- [x] User signup / login (Supabase Auth)
+- [x] Invitation system (DB-level, no email delivery)
+- [x] CSV upload → parse → store in MongoDB
+- [x] Dataset listing per org
+- [x] Natural language prompt interface
+- [x] LLM-driven visualisation generation (Gemini API)
+- [x] Chart rendering (Recharts)
+- [x] Tenant isolation on all queries
 
 ---
 
@@ -215,6 +215,124 @@ All backend queries were already scoped by `org_id` via the auth middleware — 
 | Dashboard | accessible | accessible | accessible |
 
 **Future:** Add backend role guards (`req.role` is already attached by auth middleware) — `POST /api/datasets` and `DELETE /api/datasets/:id` should return 403 for viewers. Deferred as viewer hard-blocking was not in prototype scope.
+
+---
+
+## Milestone — Phase 8: Departments + Permissions (2026-05-13)
+
+### Why
+Phase 1–7 left every user a single org-wide role. Real orgs have departments
+(Finance, HR, etc.) that need to be access boundaries, plus an executive
+"HQ" that has full reach over every department.
+
+### Model
+- **Org → Departments → Memberships.** A user no longer has one membership per
+  org — they have one membership per department, each with its own role and
+  optional `extra_permissions` overrides.
+- **HQ department**, auto-created with the org. Membership in HQ applies the
+  caller's role across **every** dept in that org (HQ admin = full CRUD
+  everywhere; HQ viewer = read-only everywhere; etc.). HQ cannot be renamed
+  or deleted.
+- **1 user : 1 org invariant kept.** A user is in at most one org. Invitations
+  are blocked at both create and accept time if they would cross orgs.
+- **Permission model** = role default ∪ `extra_permissions[]`. Roles still
+  the same enum (`admin | editor | viewer`); admins may additively grant a
+  single user extra actions (e.g. grant a viewer `upload` without promoting).
+  Canonical actions: `view`, `upload`, `edit`, `delete`, `manage_members`,
+  `manage_departments`.
+
+### Schema changes (full reset, no migration)
+- Drops the auto-personal-org signup trigger. Signup now creates only a profile.
+- New `departments` table with a partial unique index for one HQ per org.
+- `memberships.org_id` → `memberships.department_id`; adds
+  `extra_permissions text[]`.
+- `invitations.email` → `invitations.invitee_user_id`; new statuses
+  `rejected`, `revoked`; partial unique index for one pending invite per
+  (user, dept).
+- New helpers: `role_default_permissions(role)`, `user_can(user, dept, action)`,
+  `create_org(name, user)` (atomic org + HQ + admin membership).
+
+### Backend routes
+- `POST /api/organisations`, `GET /api/organisations/me`
+- `GET/POST/PATCH/DELETE /api/departments`, `GET /api/departments/:id/members`
+- `PATCH/DELETE /api/memberships/:id`
+- `POST /api/invitations`, `GET /api/invitations/incoming`,
+  `GET /api/invitations/department/:id`,
+  `POST /api/invitations/:id/accept|reject`, `DELETE /api/invitations/:id`
+- `GET /api/users/search`
+- Datasets routes now require `department_id` on upload, scope listings to
+  viewable depts (HQ membership grants every dept in the org), and check
+  per-action permissions on the dataset's dept rather than the org.
+
+### Frontend
+- `AuthContext` now exposes `memberships[]`, `organisations[]`,
+  `canInDept(action, deptId)` and `canInOrg(action, orgId)` helpers; the old
+  single-org/role fields are gone.
+- New pages: `OnboardingPage` (create org or accept invites — shown when the
+  user has zero memberships), `DepartmentsPage` (HQ admin manages depts),
+  `MembersPage` (per-dept members + invitations), `InvitationsPage` (inbox).
+- `DatasetsPage`/`VisualisePage` gain a department selector; upload/delete
+  buttons gate on per-dept permission, not a global role.
+- New `MembershipGuard` route component redirects users with no memberships
+  to `/onboarding`.
+
+### Decisions
+- **No backend-managed role guards beyond the action permission model.**
+  Phase 7's "soft block" pattern is gone — every protected endpoint checks
+  `req.can(action, dept)` explicitly. Viewers without `upload` can no longer
+  POST to `/api/datasets` even if they craft the request manually.
+- **Dept deletion blocked when datasets remain in it** (409). Keeps Mongo
+  from accumulating orphans; an HQ admin must move or soft-delete the
+  datasets first.
+- **User search powers invites.** No email delivery, no email-based invite
+  matching — invitees must already exist as a signed-in user; admins find
+  them via `/api/users/search?q=`.
+
+### Deferred / future work
+- Inviting across orgs (currently impossible by design)
+- Bulk invite to multiple depts in one action
+- Audit log of permission changes
+- Notification UI when an invite arrives (currently only badge count + page)
+
+---
+
+## Milestone — Phase 8 Complete (2026-05-13)
+
+### Departments + Permissions — fully implemented and verified
+
+All backend routes and frontend pages for Phase 8 are built, integrated, and smoke-tested end-to-end.
+
+**API smoke test results (all passing):**
+- Auth guard returns 401 without token ✓
+- `GET /api/organisations/me` returns empty array for new user ✓
+- `POST /api/organisations` creates org with HQ department + admin membership atomically ✓
+- `GET /api/organisations/me` reflects new org with 1 HQ membership ✓
+- `GET /api/departments` lists departments including HQ ✓
+- `POST /api/departments` creates non-HQ department ✓
+- `GET /api/departments/:id/members` returns members ✓
+- `GET /api/datasets` scoped to viewable departments ✓
+- `POST /api/datasets` (CSV upload) stores to MongoDB with `department_id` ✓
+- `GET /api/datasets/:id` returns full rows and columns ✓
+- `GET /api/invitations/incoming` returns empty array for new user ✓
+- `GET /api/users/search` returns matching profiles ✓
+
+**UI smoke test results (all passing, Playwright headless):**
+- Login → redirect to `/onboarding` for user with no org ✓
+- AuthContext refresh resolves → redirect to `/` ✓
+- Dashboard, Datasets, Departments, Invitations, Visualise pages all render ✓
+- No browser console errors ✓
+
+### Bug fixed during Phase 8 stabilisation
+
+**Supabase session lock deadlock** — calling `supabase.auth.getSession()` inside `onAuthStateChange` deadlocks the Supabase session mutex, causing `loading` to stay `true` forever and all authenticated pages to render blank.
+
+Fix: added a module-level token cache (`_token`, `setAuthToken`) in `frontend/src/lib/api.js`. `AuthContext` now calls `setAuthToken(token)` before `refresh()` in both the `getSession()` init block and the `onAuthStateChange` callback. The `getSession()` fallback in `authHeaders()` is retained only for callers outside React (e.g. direct API scripts).
+
+Also fixed a related race condition: `MembershipGuard` was redirecting to `/onboarding` before `refresh()` resolved because `organisations` initial state was `[]` (indistinguishable from "fetched, no orgs"). Changed initial state to `null`; `MembershipGuard` now treats `organisations === null` as still-loading and holds.
+
+### Cross-schema FK join bug fixed (PostgREST)
+
+`memberships.user_id` and `invitations.invited_by` are FKs to `auth.users(id)`, which lives in a different Postgres schema. PostgREST cannot traverse cross-schema FKs automatically — queries using `profile:profiles(...)` or `inviter:profiles(...)` joins on those columns returned 500. Fixed in three routes (`departments.js`, `invitations.js`) by fetching profiles in a separate query and merging in application code.
 
 ---
 

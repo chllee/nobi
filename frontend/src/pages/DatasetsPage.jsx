@@ -27,11 +27,26 @@ const Card = styled.div`
   padding: 24px;
 `
 
-const FileRow = styled.div`
+const Row = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+`
+
+const Label = styled.label`
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+`
+
+const Select = styled.select`
+  padding: 7px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  min-width: 200px;
 `
 
 const FileLabel = styled.label`
@@ -43,10 +58,7 @@ const FileLabel = styled.label`
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-
-  &:hover {
-    background: #e5e7eb;
-  }
+  &:hover { background: #e5e7eb; }
 `
 
 const HiddenInput = styled.input`
@@ -67,15 +79,8 @@ const UploadButton = styled.button`
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-
-  &:hover:not(:disabled) {
-    background: #333;
-  }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: #333; }
 `
 
 const StatusMsg = styled.p`
@@ -120,11 +125,6 @@ const SearchInput = styled.input`
   font-size: 14px;
   margin-bottom: 16px;
   outline: none;
-
-  &:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
-  }
 `
 
 const EmptyMsg = styled.p`
@@ -141,11 +141,6 @@ const DeleteButton = styled.button`
   border: 1px solid #fca5a5;
   border-radius: 5px;
   cursor: pointer;
-  white-space: nowrap;
-
-  &:hover {
-    background: #fef2f2;
-  }
 `
 
 const ConfirmRow = styled.span`
@@ -164,47 +159,57 @@ const ConfirmBtn = styled.button`
   border: 1px solid ${p => p.$danger ? '#fca5a5' : '#d1d5db'};
   background: ${p => p.$danger ? '#fef2f2' : '#f9fafb'};
   color: ${p => p.$danger ? '#dc2626' : '#374151'};
-
-  &:hover {
-    background: ${p => p.$danger ? '#fee2e2' : '#f3f4f6'};
-  }
 `
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 }
-
 function formatSize(bytes) {
-  return bytes < 1024 * 1024
-    ? `${(bytes / 1024).toFixed(1)} KB`
-    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
-
 function summariseColumns(columns) {
   if (columns.length <= 4) return columns.join(', ')
   return `${columns.slice(0, 4).join(', ')} +${columns.length - 4} more`
 }
 
+const ALL_DEPTS = '__all__'
+
 export default function DatasetsPage() {
-  const { role } = useAuth()
-  const canUpload = role === 'admin' || role === 'editor'
+  const { user, canInDept } = useAuth()
+  const [departments, setDepartments] = useState([])
+  const [selectedDept, setSelectedDept] = useState(ALL_DEPTS)
   const [datasets, setDatasets] = useState([])
   const [loadingList, setLoadingList] = useState(true)
   const [listError, setListError] = useState(null)
-
   const [searchQuery, setSearchQuery] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(null)
-
   const [file, setFile] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState(null) // { ok: bool, msg: string }
+  const [uploadStatus, setUploadStatus] = useState(null)
   const fileInputRef = useRef(null)
+
+  const deptById = Object.fromEntries(departments.map(d => [d.id, d]))
+  const uploadDeptId = selectedDept === ALL_DEPTS ? null : selectedDept
+  const uploadDept = uploadDeptId ? deptById[uploadDeptId] : null
+  const canUploadHere = uploadDept && canInDept('upload', uploadDept.id)
+
+  async function fetchDepartments() {
+    try {
+      const d = await apiFetch('/api/departments')
+      setDepartments(d)
+    } catch {
+      setDepartments([])
+    }
+  }
 
   async function fetchDatasets() {
     setLoadingList(true)
     setListError(null)
     try {
-      const data = await apiFetch('/api/datasets')
+      const url = selectedDept === ALL_DEPTS
+        ? '/api/datasets'
+        : `/api/datasets?department_id=${selectedDept}`
+      const data = await apiFetch(url)
       setDatasets(data)
     } catch (e) {
       setListError(e.message)
@@ -213,7 +218,8 @@ export default function DatasetsPage() {
     }
   }
 
-  useEffect(() => { fetchDatasets() }, [])
+  useEffect(() => { fetchDepartments() }, [])
+  useEffect(() => { fetchDatasets() }, [selectedDept])
 
   function handleFileChange(e) {
     setFile(e.target.files[0] ?? null)
@@ -227,11 +233,12 @@ export default function DatasetsPage() {
   }
 
   async function handleUpload() {
-    if (!file) return
+    if (!file || !uploadDeptId) return
     setUploading(true)
     setUploadStatus(null)
     const form = new FormData()
     form.append('file', file)
+    form.append('department_id', uploadDeptId)
     try {
       const result = await apiFetch('/api/datasets', { method: 'POST', body: form })
       setUploadStatus({ ok: true, msg: `Uploaded "${result.name}" — ${result.row_count} rows` })
@@ -249,34 +256,49 @@ export default function DatasetsPage() {
     <div>
       <PageTitle>Datasets</PageTitle>
 
-      {canUpload && <Section>
-        <SectionTitle>Upload a dataset</SectionTitle>
+      <Section>
         <Card>
-          <FileRow>
-            <FileLabel htmlFor="csv-upload">Choose file</FileLabel>
-            <HiddenInput
-              id="csv-upload"
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-            />
-            {file
-              ? <FileMeta>{file.name} ({formatSize(file.size)})</FileMeta>
-              : <FileMeta>CSV only · max 4 MB</FileMeta>
-            }
-            <UploadButton onClick={handleUpload} disabled={!file || uploading}>
-              {uploading ? 'Uploading…' : 'Upload'}
-            </UploadButton>
-          </FileRow>
-          {uploadStatus && (
-            <StatusMsg $error={!uploadStatus.ok}>{uploadStatus.msg}</StatusMsg>
-          )}
+          <Row>
+            <Label>Department</Label>
+            <Select value={selectedDept} onChange={e => setSelectedDept(e.target.value)}>
+              <option value={ALL_DEPTS}>All departments</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name}{d.is_hq ? ' (HQ)' : ''}</option>
+              ))}
+            </Select>
+          </Row>
         </Card>
-      </Section>}
+      </Section>
+
+      {canUploadHere && (
+        <Section>
+          <SectionTitle>Upload to {uploadDept.name}</SectionTitle>
+          <Card>
+            <Row>
+              <FileLabel htmlFor="csv-upload">Choose file</FileLabel>
+              <HiddenInput
+                id="csv-upload"
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+              />
+              {file
+                ? <FileMeta>{file.name} ({formatSize(file.size)})</FileMeta>
+                : <FileMeta>CSV only · max 4 MB</FileMeta>}
+              <UploadButton onClick={handleUpload} disabled={!file || uploading}>
+                {uploading ? 'Uploading…' : 'Upload'}
+              </UploadButton>
+            </Row>
+            {uploadStatus && <StatusMsg $error={!uploadStatus.ok}>{uploadStatus.msg}</StatusMsg>}
+          </Card>
+        </Section>
+      )}
 
       <Section>
-        <SectionTitle>Your datasets</SectionTitle>
+        <SectionTitle>
+          {selectedDept === ALL_DEPTS ? 'All datasets' : `Datasets in ${uploadDept?.name || ''}`}
+        </SectionTitle>
         <Card>
           {!loadingList && !listError && datasets.length > 0 && (
             <SearchInput
@@ -289,51 +311,61 @@ export default function DatasetsPage() {
           {loadingList && <EmptyMsg>Loading…</EmptyMsg>}
           {listError && <EmptyMsg style={{ color: '#dc2626' }}>{listError}</EmptyMsg>}
           {!loadingList && !listError && datasets.length === 0 && (
-            <EmptyMsg>No datasets yet. Upload a CSV above to get started.</EmptyMsg>
+            <EmptyMsg>
+              {selectedDept === ALL_DEPTS
+                ? 'No datasets yet.'
+                : canUploadHere
+                  ? 'No datasets in this department yet. Upload a CSV above.'
+                  : 'No datasets in this department yet.'}
+            </EmptyMsg>
           )}
           {!loadingList && !listError && datasets.length > 0 && (() => {
-            const filtered = datasets.filter(d =>
-              d.name.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-            return filtered.length === 0
-              ? <EmptyMsg>No datasets match your search.</EmptyMsg>
-              : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <Th>Name</Th>
-                      <Th>Columns</Th>
-                      <Th>Rows</Th>
-                      <Th>Uploaded</Th>
-                      {canUpload && <Th></Th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map(d => (
+            const filtered = datasets.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
+            if (filtered.length === 0) return <EmptyMsg>No datasets match your search.</EmptyMsg>
+            const showDept = selectedDept === ALL_DEPTS
+            return (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Name</Th>
+                    {showDept && <Th>Department</Th>}
+                    <Th>Columns</Th>
+                    <Th>Rows</Th>
+                    <Th>Uploaded</Th>
+                    <Th></Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(d => {
+                    const canDelete = canInDept('delete', d.department_id) || d.uploaded_by === user.id
+                    return (
                       <tr key={d.id}>
                         <Td>{d.name}</Td>
+                        {showDept && <Td>{deptById[d.department_id]?.name || '—'}</Td>}
                         <Td><ColumnList>{summariseColumns(d.columns)}</ColumnList></Td>
                         <Td>{d.row_count.toLocaleString()}</Td>
                         <Td>{formatDate(d.uploaded_at)}</Td>
-                        {canUpload && <Td>
-                          {confirmingDelete === d.id
-                            ? (
-                              <ConfirmRow>
-                                Delete?
-                                <ConfirmBtn $danger onClick={() => handleDelete(d.id)}>Yes</ConfirmBtn>
-                                <ConfirmBtn onClick={() => setConfirmingDelete(null)}>Cancel</ConfirmBtn>
-                              </ConfirmRow>
-                            )
-                            : (
-                              <DeleteButton onClick={() => setConfirmingDelete(d.id)}>Delete</DeleteButton>
-                            )
-                          }
-                        </Td>}
+                        <Td>
+                          {canDelete && (
+                            confirmingDelete === d.id
+                              ? (
+                                <ConfirmRow>
+                                  Delete?
+                                  <ConfirmBtn $danger onClick={() => handleDelete(d.id)}>Yes</ConfirmBtn>
+                                  <ConfirmBtn onClick={() => setConfirmingDelete(null)}>Cancel</ConfirmBtn>
+                                </ConfirmRow>
+                              )
+                              : (
+                                <DeleteButton onClick={() => setConfirmingDelete(d.id)}>Delete</DeleteButton>
+                              )
+                          )}
+                        </Td>
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )
+                    )
+                  })}
+                </tbody>
+              </Table>
+            )
           })()}
         </Card>
       </Section>
