@@ -179,10 +179,17 @@ This installs both frontend and backend packages via npm workspaces.
 cp .env.example .env
 ```
 Open `.env` and fill in:
-- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` — from Supabase project **Settings > API**
-- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — same project, service role key
-- `MONGO_URI` — your MongoDB Atlas connection string
-- `GEMINI_API_KEY` — from Google AI Studio
+
+| Variable | Required | Where to find it |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Yes | Supabase project **Settings > API > Project URL** |
+| `VITE_SUPABASE_ANON_KEY` | Yes | Supabase project **Settings > API > anon public** key |
+| `SUPABASE_URL` | Yes | Same as above (used by the backend with service role) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase project **Settings > API > service_role** key — keep this secret |
+| `MONGODB_URI` | Yes | MongoDB Atlas **Database > Connect > Drivers** connection string |
+| `GEMINI_API_KEY` | Yes | [Google AI Studio](https://aistudio.google.com) — Generate API key |
+| `PORT` | No | Backend port (defaults to `3001`) |
+| `FRONTEND_URL` | No | Frontend origin for CORS (defaults to `http://localhost:5173`) |
 
 **4. Apply the database schema**
 
