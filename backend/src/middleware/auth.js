@@ -53,17 +53,26 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  const { data: rows, error: memberError } = await supabase
-    .from('memberships')
-    .select('id, role, extra_permissions, department:departments(id, org_id, name, is_hq)')
-    .eq('user_id', user.id);
+  const [{ data: rows, error: memberError }, { data: profile }] = await Promise.all([
+    supabase
+      .from('memberships')
+      .select('id, role, extra_permissions, department:departments(id, org_id, name, is_hq)')
+      .eq('user_id', user.id),
+    supabase
+      .from('profiles')
+      .select('is_platform_admin')
+      .eq('id', user.id)
+      .single(),
+  ]);
 
   if (memberError) {
+    console.error('requireAuth: failed to load memberships', memberError);
     return res.status(500).json({ error: 'Failed to load memberships' });
   }
 
   req.user = user;
   req.memberships = rows || [];
+  req.isPlatformAdmin = profile?.is_platform_admin ?? false;
   const helpers = makeCan(req.memberships);
   req.can = helpers.can;
   req.canInOrg = helpers.canInOrg;
@@ -75,6 +84,14 @@ export async function requireAuth(req, res, next) {
 export function requireMembership(req, res, next) {
   if (!req.memberships || req.memberships.length === 0) {
     return res.status(403).json({ error: 'No organisation membership' });
+  }
+  next();
+}
+
+// Use on routes that require platform-level admin access.
+export function requirePlatformAdmin(req, res, next) {
+  if (!req.isPlatformAdmin) {
+    return res.status(403).json({ error: 'Platform admin access required' });
   }
   next();
 }

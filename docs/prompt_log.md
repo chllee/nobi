@@ -190,3 +190,55 @@
 **Role-based access:** Soft blocks implemented (UI only). `canUpload = role === 'admin' || role === 'editor'` in `DatasetsPage`. Upload section and delete button hidden for viewers. Hard backend guards (403 for viewers on POST/DELETE) flagged as future work.
 
 ---
+
+## Session 3 — 2026-05-15
+
+## Entry 21 — 2026-05-15
+**Prompt:** "where were we / what is left to complete a basic prototype"
+**Action:** Read prompt_log.md and feature_decisions.md to reconstruct state. Identified all 8 phases complete. Ran full backend smoke test (12 checks all passing): auth guards, org creation, department management, member listing, CSV upload to MongoDB, Gemini chart generation, soft delete. Confirmed backend is production-ready for a prototype.
+
+---
+
+## Entry 22 — 2026-05-15
+**Prompt:** "run the smoke test" + 500 error on org creation reported by user
+**Findings:**
+- All 12 smoke test checks passed from CLI
+- Cannot reproduce 500 in isolation — backend works correctly for new users
+- Discovered chloe@email.com (user's actual account) has no memberships
+- 13 auth users all have profiles (trigger firing correctly)
+- Many orphaned "Smoke Corp" orgs from previous smoke test sessions remain in DB
+- Best hypothesis: 500 was transient (Node --watch server restarted mid-request)
+- Added `console.error` logging to `requireAuth` and org creation route for future diagnosis
+
+---
+
+## Entry 23 — 2026-05-15
+**Prompt:** Three issues raised — 500 bug, immediate redirect to onboarding on signup, missing admin layer
+**Decisions:**
+- **500:** Add error logging; cannot reproduce reliably; likely transient
+- **Onboarding redirect:** Redesigned `OnboardingPage` — "Welcome to Nobi" header, invitations shown first with explanatory copy, org creation auto-expands if no invites, or tucked behind "+ Create a new organisation" toggle if invites exist
+- **Admin layer:** Full platform admin implemented (see feature_decisions.md Phase 9)
+- **Signup UX debt flagged:** `SignupPage` navigates to `/` regardless of session state — safe now (email confirmation disabled) but needs fixing post-submission. Saved to Claude memory.
+
+---
+
+## Entry 25 — 2026-05-15
+**Prompt:** "Wait for invitation" onboarding state
+**Decision:** `localStorage` flag (`nobi_waiting_for_invite`) — acceptable for prototype (single device), DB persistence noted as post-submission improvement.
+**Action:** Updated `OnboardingPage` with two distinct views:
+- **Default view:** invitations first, org creation below (auto-expands if no invites), plus "I'm waiting for an invitation" link at the bottom
+- **Waiting view:** triggered by clicking that link — shows invitations list with a manual Refresh button and "Create an organisation instead" escape hatch. Flag is cleared on org create or invite accept.
+- Users who close the browser without choosing anything return to the default view (no flag set = no persistent state, correct behaviour).
+
+---
+
+## Entry 24 — 2026-05-15
+**Prompt:** "i have run both SQL query lines" (ALTER TABLE + UPDATE for is_platform_admin)
+**Action:** Verified column exists and chloe@email.com is_platform_admin = true. Smoke-tested all admin routes:
+- Non-admin gets 403 ✓
+- `GET /api/organisations/me` returns `is_platform_admin` flag ✓
+- `GET /api/admin/overview` returns {organisations: 13, users: 13, datasets: 9} ✓
+- `GET /api/admin/organisations` returns all orgs with member_count and department_count ✓
+- `GET /api/admin/users` returns all users with is_platform_admin flag ✓
+
+---

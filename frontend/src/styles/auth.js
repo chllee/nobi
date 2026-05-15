@@ -6,6 +6,7 @@ export const Page = styled.div`
   align-items: center;
   justify-content: center;
   background: #f9fafb;
+  padding: 24px 16px;
 `
 
 export const Card = styled.div`
@@ -15,6 +16,11 @@ export const Card = styled.div`
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
+
+  @media (max-width: 480px) {
+    padding: 28px 20px;
+    border-radius: 8px;
+  }
 `
 
 export const Title = styled.h1`
@@ -43,20 +49,20 @@ export const Input = styled.input`
   outline: none;
 
   &:focus {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+    border-color: #facc15;
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.15);
   }
 `
 
 export const SubmitButton = styled.button`
   width: 100%;
   padding: 10px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #facc15;
+  color: #1a1a1a;
   border: none;
   border-radius: 6px;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   margin-top: 8px;
 
@@ -66,7 +72,7 @@ export const SubmitButton = styled.button`
   }
 
   &:hover:not(:disabled) {
-    background: #333;
+    background: #eab308;
   }
 `
 

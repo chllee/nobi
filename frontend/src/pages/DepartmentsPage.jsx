@@ -4,12 +4,6 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
 
-const PageTitle = styled.h2`
-  margin: 0 0 24px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const Section = styled.section`
   margin-bottom: 32px;
 `
@@ -38,13 +32,20 @@ const Input = styled.input`
 
 const Button = styled.button`
   padding: 8px 14px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #facc15;
+  color: #1a1a1a;
   border: none;
   border-radius: 6px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: #eab308; }
+`
+
+const TableWrap = styled.div`
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 `
 
 const Table = styled.table`
@@ -70,9 +71,16 @@ const TextBtn = styled.button`
   background: none;
   border: none;
   font-size: 13px;
-  color: ${p => p.$danger ? '#dc2626' : '#2563eb'};
+  color: ${p => p.$danger ? '#dc2626' : '#b45309'};
   cursor: pointer;
   padding: 0;
+  margin-right: 12px;
+  &:hover { text-decoration: underline; }
+`
+
+const MembersLink = styled(Link)`
+  font-size: 13px;
+  color: #b45309;
   margin-right: 12px;
   &:hover { text-decoration: underline; }
 `
@@ -170,8 +178,6 @@ export default function DepartmentsPage() {
 
   return (
     <div>
-      <PageTitle>Departments — {org.name}</PageTitle>
-
       <Section>
         <Card>
           <form onSubmit={handleCreate}>
@@ -193,7 +199,7 @@ export default function DepartmentsPage() {
 
       <Section>
         <Card>
-          <Table>
+          <TableWrap><Table>
             <thead>
               <tr>
                 <Th>Name</Th>
@@ -227,7 +233,7 @@ export default function DepartmentsPage() {
                   </Td>
                   <Td>{new Date(d.created_at).toLocaleDateString()}</Td>
                   <Td>
-                    <Link to={`/departments/${d.id}/members`} style={{ marginRight: 12 }}>Members</Link>
+                    <MembersLink to={`/departments/${d.id}/members`}>Members</MembersLink>
                     {!d.is_hq && editing !== d.id && (
                       <>
                         <TextBtn onClick={() => { setEditing(d.id); setEditName(d.name) }}>Rename</TextBtn>
@@ -238,7 +244,7 @@ export default function DepartmentsPage() {
                 </tr>
               ))}
             </tbody>
-          </Table>
+          </Table></TableWrap>
         </Card>
       </Section>
     </div>

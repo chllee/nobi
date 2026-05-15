@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom'
-import ProtectedRoute, { MembershipGuard } from './components/ProtectedRoute'
+import ProtectedRoute, { MembershipGuard, PlatformAdminGuard } from './components/ProtectedRoute'
 import AppShell from './components/AppShell'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
@@ -10,6 +10,7 @@ import VisualisePage from './pages/VisualisePage'
 import DepartmentsPage from './pages/DepartmentsPage'
 import MembersPage from './pages/MembersPage'
 import InvitationsPage from './pages/InvitationsPage'
+import AdminPage from './pages/AdminPage'
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -18,6 +19,19 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: '/onboarding', element: <OnboardingPage /> },
+      // Platform admin — auth required, no org membership needed
+      {
+        element: <PlatformAdminGuard />,
+        children: [
+          {
+            element: <AppShell />,
+            children: [
+              { path: '/admin', element: <AdminPage /> },
+            ],
+          },
+        ],
+      },
+      // Regular app — auth + org membership required
       {
         element: <MembershipGuard />,
         children: [

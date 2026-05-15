@@ -4,12 +4,6 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
 
-const PageTitle = styled.h2`
-  margin: 0 0 24px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const Section = styled.section`
   margin-bottom: 32px;
 `
@@ -56,13 +50,15 @@ const Select = styled.select`
 
 const Button = styled.button`
   padding: 8px 14px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #facc15;
+  color: #1a1a1a;
   border: none;
   border-radius: 6px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: #eab308; }
 `
 
 const SearchResult = styled.div`
@@ -76,6 +72,11 @@ const SearchResult = styled.div`
   font-size: 13px;
   cursor: pointer;
   &:hover { background: #f9fafb; }
+`
+
+const TableWrap = styled.div`
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 `
 
 const Table = styled.table`
@@ -112,11 +113,24 @@ const TextBtn = styled.button`
   background: none;
   border: none;
   font-size: 13px;
-  color: ${p => p.$danger ? '#dc2626' : '#2563eb'};
+  color: ${p => p.$danger ? '#dc2626' : '#b45309'};
   cursor: pointer;
   padding: 0;
   margin-right: 12px;
   &:hover { text-decoration: underline; }
+`
+
+const SaveBtn = styled.button`
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: none;
+  background: #facc15;
+  color: #1a1a1a;
+  font-weight: 600;
+  cursor: pointer;
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: #eab308; }
 `
 
 const ErrorMsg = styled.p`
@@ -138,6 +152,7 @@ export default function MembersPage() {
   const [search, setSearch] = useState('')
   const [results, setResults] = useState([])
   const [inviteRole, setInviteRole] = useState('viewer')
+  const [pendingRoles, setPendingRoles] = useState({})
 
   async function load() {
     setError(null)
@@ -168,7 +183,7 @@ export default function MembersPage() {
     return () => clearTimeout(handle)
   }, [search])
 
-  const canManage = dept && canInDept('manage_members', dept.id)
+  const canManage = dept && canInDept('manage_members', dept)
 
   async function handleInvite(invitee) {
     setError(null)
@@ -198,11 +213,20 @@ export default function MembersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       })
+      setPendingRoles(p => { const n = { ...p }; delete n[memberId]; return n })
       load()
       refresh()
     } catch (e) {
       setError(e.message)
     }
+  }
+
+  function setPendingRole(memberId, role) {
+    setPendingRoles(p => ({ ...p, [memberId]: role }))
+  }
+
+  function cancelPendingRole(memberId) {
+    setPendingRoles(p => { const n = { ...p }; delete n[memberId]; return n })
   }
 
   async function handlePermToggle(member, perm, checked) {
@@ -243,12 +267,14 @@ export default function MembersPage() {
     }
   }
 
-  if (!dept) return <p>{error || 'Loading…'}</p>
+  if (!dept) return (
+    <p style={{ color: error ? '#dc2626' : '#6b7280', fontSize: 14 }}>
+      {error || 'Loading…'}
+    </p>
+  )
 
   return (
     <div>
-      <PageTitle>{dept.name} — Members{dept.is_hq ? ' (HQ)' : ''}</PageTitle>
-
       {canManage && (
         <Section>
           <SectionTitle>Invite a user</SectionTitle>
@@ -278,7 +304,7 @@ export default function MembersPage() {
       <Section>
         <SectionTitle>Members</SectionTitle>
         <Card>
-          <Table>
+          <TableWrap><Table>
             <thead>
               <tr>
                 <Th>User</Th>
@@ -295,16 +321,26 @@ export default function MembersPage() {
                     <div style={{ color: '#9ca3af', fontSize: 12 }}>{m.profile.email}</div>
                   </Td>
                   <Td>
-                    {canManage
-                      ? (
-                        <Select value={m.role} onChange={e => handleRoleChange(m.id, e.target.value)}>
+                    {canManage ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Select
+                          value={pendingRoles[m.id] ?? m.role}
+                          onChange={e => setPendingRole(m.id, e.target.value)}
+                        >
                           <option value="viewer">viewer</option>
                           <option value="editor">editor</option>
                           <option value="admin">admin</option>
                         </Select>
-                      )
-                      : m.role
-                    }
+                        {pendingRoles[m.id] !== undefined && pendingRoles[m.id] !== m.role && (
+                          <>
+                            <SaveBtn onClick={() => handleRoleChange(m.id, pendingRoles[m.id])}>
+                              Save
+                            </SaveBtn>
+                            <TextBtn onClick={() => cancelPendingRole(m.id)}>Cancel</TextBtn>
+                          </>
+                        )}
+                      </div>
+                    ) : m.role}
                   </Td>
                   <Td>
                     {canManage
@@ -331,7 +367,7 @@ export default function MembersPage() {
                 </tr>
               ))}
             </tbody>
-          </Table>
+          </Table></TableWrap>
         </Card>
       </Section>
 
@@ -339,7 +375,7 @@ export default function MembersPage() {
         <Section>
           <SectionTitle>Pending invitations</SectionTitle>
           <Card>
-            <Table>
+            <TableWrap><Table>
               <thead>
                 <tr>
                   <Th>User</Th>
@@ -363,7 +399,7 @@ export default function MembersPage() {
                   </tr>
                 ))}
               </tbody>
-            </Table>
+            </Table></TableWrap>
           </Card>
         </Section>
       )}

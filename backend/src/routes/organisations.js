@@ -15,6 +15,7 @@ router.post('/', requireAuth, async (req, res) => {
     p_user: req.user.id,
   });
   if (error) {
+    console.error('create_org RPC error:', error);
     return res.status(500).json({ error: error.message });
   }
 
@@ -24,7 +25,7 @@ router.post('/', requireAuth, async (req, res) => {
 // Summary of every org the caller belongs to: org info + the caller's memberships within it.
 router.get('/me', requireAuth, async (req, res) => {
   if (req.memberships.length === 0) {
-    return res.json({ organisations: [] });
+    return res.json({ organisations: [], is_platform_admin: req.isPlatformAdmin });
   }
 
   const orgIds = [...new Set(req.memberships.map(m => m.department.org_id))];
@@ -47,7 +48,7 @@ router.get('/me', requireAuth, async (req, res) => {
       })),
   }));
 
-  res.json({ organisations: byOrg });
+  res.json({ organisations: byOrg, is_platform_admin: req.isPlatformAdmin });
 });
 
 export default router;

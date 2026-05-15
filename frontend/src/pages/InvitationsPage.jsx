@@ -3,12 +3,6 @@ import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
 
-const PageTitle = styled.h2`
-  margin: 0 0 24px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const Card = styled.div`
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -103,7 +97,6 @@ export default function InvitationsPage() {
 
   return (
     <div>
-      <PageTitle>Invitations</PageTitle>
       <Card>
         {loading
           ? <Empty>Loading…</Empty>

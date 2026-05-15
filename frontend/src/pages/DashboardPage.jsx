@@ -3,12 +3,6 @@ import styled from 'styled-components'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
 
-const Heading = styled.h2`
-  margin: 0 0 4px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const Sub = styled.p`
   margin: 0 0 32px;
   font-size: 14px;
@@ -59,7 +53,6 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <Heading>Welcome to {org?.name ?? '…'}</Heading>
       <Sub>Departments you belong to: {myDepts || '—'}</Sub>
       <StatsRow>
         <StatCard>

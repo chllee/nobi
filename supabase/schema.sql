@@ -37,10 +37,11 @@ CREATE TYPE invite_status AS ENUM ('pending', 'accepted', 'rejected', 'revoked')
 -- ============================================================
 
 CREATE TABLE profiles (
-  id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  display_name  text,
-  email         text,
-  created_at    timestamptz DEFAULT now()
+  id                  uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name        text,
+  email               text,
+  is_platform_admin   boolean NOT NULL DEFAULT false,
+  created_at          timestamptz DEFAULT now()
 );
 
 CREATE TABLE organisations (

@@ -8,6 +8,7 @@ import departmentsRouter from './routes/departments.js';
 import membershipsRouter from './routes/memberships.js';
 import invitationsRouter from './routes/invitations.js';
 import usersRouter from './routes/users.js';
+import adminRouter from './routes/admin.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +27,7 @@ app.use('/api/invitations', invitationsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/datasets', datasetsRouter);
 app.use('/api/visualise', visualiseRouter);
+app.use('/api/admin', adminRouter);
 
 connectMongo()
   .then(() => {

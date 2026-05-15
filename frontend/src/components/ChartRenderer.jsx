@@ -230,7 +230,7 @@ function ChartRenderer({ config, rows }) {
   }
 
   return (
-    <div>
+    <div style={{ width: '100%' }}>
       {config.title && (
         <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600, color: '#111827' }}>
           {config.title}

@@ -3,12 +3,6 @@ import styled from 'styled-components'
 import { apiFetch } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
-const PageTitle = styled.h2`
-  margin: 0 0 24px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const Section = styled.section`
   margin-bottom: 40px;
 `
@@ -72,15 +66,15 @@ const FileMeta = styled.span`
 
 const UploadButton = styled.button`
   padding: 8px 18px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #facc15;
+  color: #1a1a1a;
   border: none;
   border-radius: 6px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   &:disabled { opacity: 0.45; cursor: not-allowed; }
-  &:hover:not(:disabled) { background: #333; }
+  &:hover:not(:disabled) { background: #eab308; }
 `
 
 const StatusMsg = styled.p`
@@ -125,6 +119,11 @@ const SearchInput = styled.input`
   font-size: 14px;
   margin-bottom: 16px;
   outline: none;
+`
+
+const TableWrap = styled.div`
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 `
 
 const EmptyMsg = styled.p`
@@ -191,12 +190,13 @@ export default function DatasetsPage() {
   const deptById = Object.fromEntries(departments.map(d => [d.id, d]))
   const uploadDeptId = selectedDept === ALL_DEPTS ? null : selectedDept
   const uploadDept = uploadDeptId ? deptById[uploadDeptId] : null
-  const canUploadHere = uploadDept && canInDept('upload', uploadDept.id)
+  const canUploadHere = uploadDept && canInDept('upload', uploadDept)
 
   async function fetchDepartments() {
     try {
       const d = await apiFetch('/api/departments')
       setDepartments(d)
+      if (d.length === 1) setSelectedDept(d[0].id)
     } catch {
       setDepartments([])
     }
@@ -254,8 +254,6 @@ export default function DatasetsPage() {
 
   return (
     <div>
-      <PageTitle>Datasets</PageTitle>
-
       <Section>
         <Card>
           <Row>
@@ -324,7 +322,7 @@ export default function DatasetsPage() {
             if (filtered.length === 0) return <EmptyMsg>No datasets match your search.</EmptyMsg>
             const showDept = selectedDept === ALL_DEPTS
             return (
-              <Table>
+              <TableWrap><Table>
                 <thead>
                   <tr>
                     <Th>Name</Th>
@@ -337,7 +335,7 @@ export default function DatasetsPage() {
                 </thead>
                 <tbody>
                   {filtered.map(d => {
-                    const canDelete = canInDept('delete', d.department_id) || d.uploaded_by === user.id
+                    const canDelete = canInDept('delete', deptById[d.department_id] ?? d.department_id) || d.uploaded_by === user.id
                     return (
                       <tr key={d.id}>
                         <Td>{d.name}</Td>
@@ -364,7 +362,7 @@ export default function DatasetsPage() {
                     )
                   })}
                 </tbody>
-              </Table>
+              </Table></TableWrap>
             )
           })()}
         </Card>

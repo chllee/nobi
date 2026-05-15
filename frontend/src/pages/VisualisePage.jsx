@@ -3,12 +3,6 @@ import styled from 'styled-components'
 import { apiFetch } from '../lib/api'
 import ChartRenderer from '../components/ChartRenderer'
 
-const PageTitle = styled.h2`
-  margin: 0 0 24px;
-  font-size: 20px;
-  font-weight: 600;
-`
-
 const TopRow = styled.div`
   display: flex;
   gap: 12px;
@@ -21,7 +15,7 @@ const Layout = styled.div`
   display: grid;
   grid-template-columns: 360px 1fr;
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
   @media (max-width: 768px) { grid-template-columns: 1fr; }
 `
 
@@ -36,6 +30,7 @@ const Panel = styled.div`
 const PanelBody = styled.div`
   padding: 20px;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -63,7 +58,8 @@ const ChatLog = styled.div`
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 340px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 `
@@ -106,14 +102,15 @@ const Textarea = styled.textarea`
 
 const SendButton = styled.button`
   padding: 8px 16px;
-  background: #1a1a1a;
-  color: #fff;
+  background: #facc15;
+  color: #1a1a1a;
   border: none;
   border-radius: 6px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: #eab308; }
 `
 
 const ChartCard = styled.div`
@@ -123,7 +120,8 @@ const ChartCard = styled.div`
   padding: 24px;
   min-height: 460px;
   display: flex;
-  align-items: ${p => p.$empty ? 'center' : 'flex-start'};
+  flex-direction: column;
+  align-items: ${p => p.$empty ? 'center' : 'stretch'};
   justify-content: ${p => p.$empty ? 'center' : 'flex-start'};
 `
 
@@ -224,8 +222,6 @@ export default function VisualisePage() {
 
   return (
     <div>
-      <PageTitle>Visualise</PageTitle>
-
       <TopRow>
         <Label style={{ marginBottom: 0 }}>Department</Label>
         <Select

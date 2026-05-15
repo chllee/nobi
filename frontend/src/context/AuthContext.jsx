@@ -19,12 +19,16 @@ export function AuthProvider({ children }) {
   const [organisations, setOrganisations] = useState(null) // null = not yet fetched
   const [loading, setLoading] = useState(true)
 
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+
   const refresh = useCallback(async () => {
     try {
       const data = await apiFetch('/api/organisations/me')
       setOrganisations(data?.organisations ?? [])
+      setIsPlatformAdmin(data?.is_platform_admin ?? false)
     } catch {
       setOrganisations([])
+      setIsPlatformAdmin(false)
     }
   }, [])
 
@@ -53,9 +57,14 @@ export function AuthProvider({ children }) {
     (o.memberships || []).map(m => ({ ...m, org: { id: o.id, name: o.name } }))
   )
 
-  const canInDept = (action, deptId) => {
-    const direct = memberships.find(m => m.department.id === deptId)
-    const orgId = direct?.department.org_id
+  // Accepts a dept ID string or a { id, org_id } object.
+  // Passing the full object lets the HQ-override check work even when the
+  // caller has no direct membership in that department.
+  const canInDept = (action, deptOrId) => {
+    const deptId   = typeof deptOrId === 'string' ? deptOrId : deptOrId?.id
+    const hintOrg  = typeof deptOrId === 'string' ? null     : deptOrId?.org_id
+    const direct   = memberships.find(m => m.department.id === deptId)
+    const orgId    = hintOrg ?? direct?.department.org_id
     if (orgId) {
       const hq = memberships.find(m => m.department.is_hq && m.department.org_id === orgId)
       if (hq && permsFor(hq.role, hq.extra_permissions).has(action)) return true
@@ -75,6 +84,7 @@ export function AuthProvider({ children }) {
       user: session?.user ?? null,
       organisations,
       memberships,
+      isPlatformAdmin,
       loading,
       signOut,
       refresh,

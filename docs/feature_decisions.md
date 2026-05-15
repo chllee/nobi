@@ -55,6 +55,7 @@
 - [x] LLM-driven visualisation generation (Gemini API)
 - [x] Chart rendering (Recharts)
 - [x] Tenant isolation on all queries
+- [x] Platform admin layer (see Phase 9)
 
 ---
 
@@ -336,6 +337,44 @@ Also fixed a related race condition: `MembershipGuard` was redirecting to `/onbo
 
 ---
 
+## Milestone — Phase 9: Platform Admin Layer (2026-05-15)
+
+### Why
+Phases 1–8 had no visibility above the org level. In a real multi-tenant app a platform operator needs to see all orgs, manage users, and be able to clean up or delete orgs without going into the database directly.
+
+### Model
+- `is_platform_admin boolean NOT NULL DEFAULT false` added to `profiles` table.
+- Platform admins are set via SQL or via the admin UI itself (toggle).
+- Platform admin access is completely independent of org membership — a platform admin with no org can still access `/admin`.
+- `requirePlatformAdmin` middleware enforces this at the backend; `PlatformAdminGuard` route component enforces it on the frontend.
+
+### Backend routes (`GET|PATCH|DELETE /api/admin/*`)
+- `GET /api/admin/overview` — platform-wide stats: total orgs, users, datasets.
+- `GET /api/admin/organisations` — all orgs with `member_count` and `department_count`.
+- `DELETE /api/admin/organisations/:id` — hard delete org + cascade in Postgres; also deletes org's MongoDB datasets.
+- `GET /api/admin/users` — all users with profile info and org affiliations.
+- `PATCH /api/admin/users/:id/admin` — toggle `is_platform_admin` flag.
+
+### Frontend
+- `AdminPage.jsx` at `/admin` — stats cards, org table with delete (two-step confirm), user table with Make/Remove admin toggle.
+- `PlatformAdminGuard` route component — redirects non-admins to `/`.
+- **Admin** nav link in `AppShell` — visible only when `isPlatformAdmin` is true.
+- `AuthContext` exposes `isPlatformAdmin` (sourced from `GET /api/organisations/me` response).
+
+### `requireAuth` middleware update
+Now runs two Supabase queries in parallel: memberships join (existing) + `profiles.is_platform_admin` lookup. Attaches `req.isPlatformAdmin` to all authenticated requests.
+
+### Onboarding UX redesign (same session)
+- `OnboardingPage` now shows "Welcome to Nobi" header with explanatory copy.
+- **Invitations section shown first** — if the user has pending invites, they are listed prominently.
+- Org creation **auto-expands** if no invites exist; otherwise collapses behind a `+ Create a new organisation` toggle.
+- **"I'm waiting for an invitation"** link at the bottom — sets a `localStorage` flag (`nobi_waiting_for_invite`) and switches the page to a waiting room view: invitations list + manual Refresh button + "Create an organisation instead" escape hatch.
+- Flag is cleared when the user creates an org or accepts an invite.
+- Users who close without choosing return to the default view (no flag = no state = correct).
+- **Deferred:** persist waiting preference in DB (`onboarding_state` on profiles) so it survives across devices. Acceptable as localStorage for prototype scope.
+
+---
+
 ## Features Explicitly Out of Scope
 
 - Multi-org membership per user
@@ -344,5 +383,6 @@ Also fixed a related race condition: `MembershipGuard` was redirecting to `/onbo
 - Saved / persistent visualisations
 - Export of charts
 - Real-time collaboration
+- Signup "check your email" state (deferred post-submission — safe while email confirmation is disabled)
 
 ---

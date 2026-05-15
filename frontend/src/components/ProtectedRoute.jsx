@@ -16,3 +16,11 @@ export function MembershipGuard() {
   if (memberships.length === 0) return <Navigate to="/onboarding" replace />
   return <Outlet />
 }
+
+// Protects routes that require platform admin access.
+export function PlatformAdminGuard() {
+  const { isPlatformAdmin, loading, organisations } = useAuth()
+  if (loading || organisations === null) return null
+  if (!isPlatformAdmin) return <Navigate to="/" replace />
+  return <Outlet />
+}
