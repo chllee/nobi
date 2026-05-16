@@ -1,4 +1,4 @@
-# Nobi — Multi-Tenant Data Visualisation Platform
+# Nobi — Data Visualization for Teams
 
 ## Overview
 
