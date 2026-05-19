@@ -34,6 +34,11 @@ The live demo on submission day could not connect to Supabase, MongoDB Atlas, or
   Your browser does not support inline video. Download <a href="./demo.mp4">demo.mp4</a> or <a href="./demo.webm">demo.webm</a>.
 </video>
 
+
+
+https://github.com/user-attachments/assets/8a0072e8-962d-43e1-9fa4-788c817fc7a9
+
+
 ### Main user flow from start to finish
 
 1. **Sign up** — create an account with your display name and email. A profile record is created automatically in the database via a Postgres trigger.
