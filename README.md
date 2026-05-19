@@ -26,7 +26,13 @@ All 9 development phases were completed and smoke-tested end-to-end within the s
 
 ### Recorded walkthrough
 
-A full end-to-end screencast of the app is included in this repo at [`demo.webm`](./demo.webm). The live demo on submission day could not connect to Supabase, MongoDB Atlas, or the Gemini API because the corporate network firewall blocked the outbound calls to those services; the recording was made on an unrestricted network and shows the same build running successfully against all three.
+The live demo on submission day could not connect to Supabase, MongoDB Atlas, or the Gemini API because the corporate network firewall blocked the outbound calls to those services. The recording below was made on an unrestricted network and shows the same build running successfully against all three.
+
+<video src="https://github.com/chllee/nobi/raw/main/demo.mp4" controls width="720">
+  <source src="https://github.com/chllee/nobi/raw/main/demo.mp4" type="video/mp4">
+  <source src="https://github.com/chllee/nobi/raw/main/demo.webm" type="video/webm">
+  Your browser does not support inline video. Download <a href="./demo.mp4">demo.mp4</a> or <a href="./demo.webm">demo.webm</a>.
+</video>
 
 ### Main user flow from start to finish
 
