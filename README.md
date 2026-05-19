@@ -24,6 +24,10 @@ All 9 development phases were completed and smoke-tested end-to-end within the s
 
 ## Demo
 
+### Recorded walkthrough
+
+A full end-to-end screencast of the app is included in this repo at [`demo.webm`](./demo.webm). The live demo on submission day could not connect to Supabase, MongoDB Atlas, or the Gemini API because the corporate network firewall blocked the outbound calls to those services; the recording was made on an unrestricted network and shows the same build running successfully against all three.
+
 ### Main user flow from start to finish
 
 1. **Sign up** — create an account with your display name and email. A profile record is created automatically in the database via a Postgres trigger.
