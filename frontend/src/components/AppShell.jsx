@@ -204,7 +204,7 @@ const MobileSignOut = styled.button`
 const Main = styled.main`
   flex: 1;
   padding: 32px 24px;
-  max-width: 1200px;
+  max-width: ${p => p.$wide ? 'none' : '1200px'};
   width: 100%;
   margin: 0 auto;
 
@@ -284,7 +284,7 @@ export default function AppShell() {
         </MobileMenu>
       )}
 
-      <Main>
+      <Main $wide={location.pathname === '/visualise'}>
         <Outlet />
       </Main>
     </Shell>

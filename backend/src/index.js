@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { connectMongo } from './lib/mongo.js';
 import datasetsRouter from './routes/datasets.js';
+import visualisationsRouter from './routes/visualisations.js';
 import visualiseRouter from './routes/visualise.js';
 import organisationsRouter from './routes/organisations.js';
 import departmentsRouter from './routes/departments.js';
@@ -27,6 +28,7 @@ app.use('/api/invitations', invitationsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/datasets', datasetsRouter);
 app.use('/api/visualise', visualiseRouter);
+app.use('/api/visualisations', visualisationsRouter);
 app.use('/api/admin', adminRouter);
 
 connectMongo()

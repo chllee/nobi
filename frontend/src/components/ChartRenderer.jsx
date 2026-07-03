@@ -6,7 +6,7 @@ import {
   AreaChart, Area,
   ScatterChart, Scatter,
   PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, Label,
 } from 'recharts'
 
 const PIE_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16']
@@ -134,12 +134,18 @@ function getValidationError(rows, config) {
 
 function ChartRenderer({ config, rows }) {
   const data = useMemo(
-    () => (config && rows?.length ? prepareData(rows, config) : []),
+    () => {
+      if (config?.data) return config.data          // pre-computed data from Gemini
+      return (config && rows?.length ? prepareData(rows, config) : [])
+    },
     [rows, config]
   )
 
   const validationError = useMemo(
-    () => (config && rows?.length ? getValidationError(rows, config) : null),
+    () => {
+      if (config?.data) return null                 // computed data is always valid
+      return (config && rows?.length ? getValidationError(rows, config) : null)
+    },
     [rows, config]
   )
 
@@ -166,8 +172,12 @@ function ChartRenderer({ config, rows }) {
   const axes = (
     <>
       <CartesianGrid strokeDasharray="3 3" />
-      <XAxis dataKey={config.xKey} tick={{ fontSize: 12 }} angle={-35} textAnchor="end" interval="preserveStartEnd" />
-      <YAxis tick={{ fontSize: 12 }} />
+      <XAxis dataKey={config.xKey} tick={{ fontSize: 12 }} angle={-35} textAnchor="end" interval="preserveStartEnd">
+        {config.xLabel && <Label value={config.xLabel} offset={-5} position="insideBottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
+      </XAxis>
+      <YAxis tick={{ fontSize: 12 }}>
+        {config.yLabel && <Label value={config.yLabel} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
+      </YAxis>
       <Tooltip />
       <Legend />
     </>
@@ -215,8 +225,12 @@ function ChartRenderer({ config, rows }) {
     chart = (
       <ScatterChart margin={margin}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey={config.xKey} type="number" name={config.xKey} tick={{ fontSize: 12 }} />
-        <YAxis dataKey={config.yKeys[0].dataKey} type="number" name={config.yKeys[0].name} tick={{ fontSize: 12 }} />
+        <XAxis dataKey={config.xKey} type="number" name={config.xKey} tick={{ fontSize: 12 }}>
+          {config.xLabel && <Label value={config.xLabel} offset={-5} position="insideBottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
+        </XAxis>
+        <YAxis dataKey={config.yKeys[0].dataKey} type="number" name={config.yKeys[0].name} tick={{ fontSize: 12 }}>
+          {config.yLabel && <Label value={config.yLabel} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
+        </YAxis>
         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
         <Scatter data={data} fill={config.yKeys[0].color} />
       </ScatterChart>

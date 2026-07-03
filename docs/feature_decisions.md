@@ -114,8 +114,8 @@
 - Even sampling capped at 300 points for continuous charts
 
 ### Model fallback chain
-- `MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest']`
-- Silently tries next model on 429 or 503; only surfaces error to user if all models fail
+- `MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest']`
+- Silently tries next model on 429, 503, or 404 (e.g. a retired model); only surfaces error to user if all models fail
 - Rate limit error also reverts the user's message and restores prompt text so retry is one click
 
 ### Known limitation

@@ -155,7 +155,7 @@ The prompt described the desired access model entirely in business and user term
 | Polyglot persistence | Supabase Postgres for identity and tenancy data; MongoDB Atlas for CSV datasets. Relational store for structured, RLS-guarded data; document store for flexible, variable-column CSV rows |
 | User-to-org relationship | 1:1 for prototype scope. A user belongs to at most one organisation. Cross-org invites are blocked at create and accept time |
 | AI provider | Switched from Anthropic Claude API to Google Gemini (`gemini-2.5-flash`, prepaid) mid-build. Developer's Anthropic account tied to workplace org and unavailable for personal project use |
-| Gemini model fallback chain | `['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-flash-latest']` — silent retry on 429 / 503; user message reverted on full failure so retry is one click |
+| Gemini model fallback chain | `['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest']` — silent retry on 429 / 503 / 404 (retired model); user message reverted on full failure so retry is one click |
 | Invitation flow | Database-level only; no email delivery. Invitees must already be registered. Admins find them via `/api/users/search` |
 | CSV upload cap | 4 MB input + 14 MB post-parse JSON guard. CSV-to-JSON expansion is typically 2–5×; MongoDB's document limit is 16 MB |
 | Role model | Three tiers: admin (full), editor (upload + edit), viewer (read + visualise). `extra_permissions` text array allows per-user additive grants without changing the base role |
