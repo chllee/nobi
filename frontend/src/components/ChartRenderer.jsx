@@ -167,19 +167,19 @@ function ChartRenderer({ config, rows }) {
     )
   }
 
-  const margin = { top: 10, right: 20, left: 0, bottom: 50 }
+  const margin = { top: 10, right: 20, left: 0, bottom: 70 }
 
   const axes = (
     <>
       <CartesianGrid strokeDasharray="3 3" />
       <XAxis dataKey={config.xKey} tick={{ fontSize: 12 }} angle={-35} textAnchor="end" interval="preserveStartEnd">
-        {config.xLabel && <Label value={config.xLabel} offset={-5} position="insideBottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
+        {config.xLabel && <Label value={config.xLabel} offset={20} position="bottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
       </XAxis>
       <YAxis tick={{ fontSize: 12 }}>
         {config.yLabel && <Label value={config.yLabel} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
       </YAxis>
       <Tooltip />
-      <Legend />
+      <Legend verticalAlign="bottom" align="center" height={36} wrapperStyle={{ paddingTop: 32 }} />
     </>
   )
 

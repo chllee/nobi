@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { ObjectId } from 'mongodb';
-import { requireAuth, requireMembership } from '../middleware/auth.js';
-import { getDb } from '../lib/mongo.js';
+import { requireAuth, requireMembership } from '../../middleware/auth.js';
+import { getDb } from '../../lib/mongo.js';
 
 const router = Router();
 

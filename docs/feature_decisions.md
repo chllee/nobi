@@ -375,12 +375,48 @@ Now runs two Supabase queries in parallel: memberships join (existing) + `profil
 
 ---
 
+## Milestone — Visualiser Reorg: Tool Registry for Gemini Function-Calling (2026-07-07)
+
+### Why
+Chart-visualisation backend code (`visualise.js`, `visualisations.js`) lived alongside unrelated routes (org/dept/auth/datasets) in `backend/src/routes/`. Separately, Gemini function-calling had been added as a single `compute_aggregation` tool inline in `visualise.js`, with a hardcoded `operation` enum (`sum`/`avg`/`count`/`min`/`max`) — workable for one tool, but not a base to add further tool categories on top of.
+
+### New layout
+```
+backend/src/visualiser/
+├── routes/
+│   ├── visualise.js
+│   └── visualisations.js
+└── toolRegistry/
+    ├── registry.js       # auto-discovers tool files, dispatch()
+    └── basic_math.js     # sum, average, median, count, min, max
+```
+
+### Tool split
+`compute_aggregation`'s `operation` enum replaced by six separately named Gemini tools in `basic_math.js` (`sum`, `average`, `median`, `count`, `min`, `max`), each sharing a common `agg_column` + optional `group_by_column` parameter shape via a `makeTool()` factory. `median` is a new capability — did not exist under the old single-tool design.
+
+### Registry auto-discovery
+`toolRegistry/registry.js` scans its own directory at startup, dynamically imports every tool file it finds, and collects each file's `toolList` export (the required, load-bearing export name every tool file must use — silently drops that file's tools if misnamed or missing). Dropping a new tool file into `toolRegistry/` registers it automatically with no edits to `registry.js`. A startup check throws on duplicate tool names across files, so a future collision fails loudly instead of silently shadowing an existing tool.
+
+### Correction to earlier scope note
+"Saved / persistent visualisations" was previously listed below under Features Explicitly Out of Scope — this is now implemented (`backend/src/visualiser/routes/visualisations.js`, `POST/GET/PATCH/DELETE /api/visualisations`, soft-delete, ownership-scoped) and has been removed from that list.
+
+---
+
+## Milestone — Multi-turn tool-calling loop + explicit generation config (2026-07-07)
+
+### Multi-turn loop (fixes the previous "known limitation")
+`callGeminiWithTools` (`backend/src/visualiser/routes/visualise.js`) previously handled exactly two turns: one shot at a function call, one shot at the final answer, with no check for a function call on that second turn. Replaced with a real loop — after each `sendMessage`, checks `response.functionCalls()` again and keeps executing + sending results back until Gemini returns a turn with no further function calls, capped at `MAX_TOOL_TURNS = 4` to guard against a runaway loop. If the cap is hit with calls still pending, it logs a warning and returns best-effort text rather than crashing. This resolves compound prompts (e.g. two different aggregations in one question) that could previously trigger a second tool-call round and come back with a silently empty explanation and no chart.
+
+### Explicit generationConfig
+`getGenerativeModel(...)` previously omitted `generationConfig` entirely, so all three fallback models ran on Gemini's server-side defaults implicitly. Added an explicit `GENERATION_CONFIG` constant (`temperature: 1.0, topP: 0.95, topK: 64`, matching Gemini 2.5 Flash's actual defaults) so these are now a visible, adjustable knob rather than implicit behaviour. `maxOutputTokens` intentionally left unset — it has no fixed default (capped at 65536, otherwise the model stops naturally), and setting it would change current behaviour rather than just make it explicit.
+
+---
+
 ## Features Explicitly Out of Scope
 
 - Multi-org membership per user
 - Email delivery for invitations
 - Dataset versioning / update / delete
-- Saved / persistent visualisations
 - Export of charts
 - Real-time collaboration
 - Signup "check your email" state (deferred post-submission — safe while email confirmation is disabled)
