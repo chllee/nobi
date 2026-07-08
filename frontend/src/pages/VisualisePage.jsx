@@ -523,6 +523,13 @@ const NoComments = styled.p`
 
 const ALL_DEPTS = '__all__'
 
+// Assistant messages store the raw model text (chart-config JSON block
+// included) so it round-trips into Gemini's chat history — strip it here for
+// display only.
+function displayContent(content) {
+  return content.replace(/```json[\s\S]*?```/g, '').trim()
+}
+
 export default function VisualisePage() {
   const [departments, setDepartments] = useState([])
   const [deptFilter, setDeptFilter] = useState(ALL_DEPTS)
@@ -718,13 +725,16 @@ export default function VisualisePage() {
     setPrompt('')
     updateChart(chart.id, { messages: nextMessages, sending: true, error: null })
     try {
-      const { explanation, config } = await apiFetch('/api/visualise', {
+      const { explanation, config, raw } = await apiFetch('/api/visualise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ datasetId: chart.datasetId, messages: nextMessages }),
       })
       updateChart(chart.id, c => ({
-        messages: [...c.messages, { role: 'assistant', content: explanation }],
+        // store the raw response (chart-config JSON block included) so it
+        // round-trips back into the next request's history — Gemini needs to
+        // see its own prior chart config to act on follow-up tweak requests
+        messages: [...c.messages, { role: 'assistant', content: raw || explanation }],
         config: config || c.config,
         title: c.titleEditedByUser ? c.title : (config?.title || c.title),
         sending: false,
@@ -892,7 +902,7 @@ export default function VisualisePage() {
             {activeChart && activeChart.messages.length > 0 && (
               <ChatLog>
                 {activeChart.messages.map((m, i) => (
-                  <Bubble key={i} $role={m.role}>{m.content}</Bubble>
+                  <Bubble key={i} $role={m.role}>{m.role === 'assistant' ? displayContent(m.content) : m.content}</Bubble>
                 ))}
                 <div ref={chatBottomRef} />
               </ChatLog>

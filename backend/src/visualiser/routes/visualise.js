@@ -127,6 +127,8 @@ router.post('/', requireAuth, requireMembership, async (req, res) => {
 		- Multiple lines/bars/series split by a category ("one line per gender", "sales by month split by region") — call the pivot tool ONCE rather than calling a single-series tool multiple times and merging the results yourself. Its result already has one field per series value — use those exact field names as your yKeys dataKeys.
 		- Any question that requires computing across the full dataset (not just the 5 sample rows)
 
+		If the user is asking you to tweak the chart you already produced (chart type, colours, title, labels, sorting) rather than asking a new analytical question, do NOT call a tool or recompute — reuse the exact "data" array from your most recent JSON code block earlier in this conversation and only change the fields the user asked about.
+
 		After calling a tool, analyse the result and:
 		1. Give a clear plain-English explanation with actual numbers from the computed data
 		2. Include a JSON code block (\`\`\`json) with this chart config structure:
@@ -137,9 +139,18 @@ router.post('/', requireAuth, requireMembership, async (req, res) => {
 		"xLabel": "label text for the x-axis (omit for PieChart)",
 		"yLabel": "label text for the y-axis (omit for PieChart)",
 		"yKeys": [{ "dataKey": "column name", "name": "display label", "color": "#hexcolor" }],
-		"data": [{ "xKey column name": "value", "dataKey column name": "number" }]
+		"data": [{ "xKey column name": "value", "dataKey column name": "number" }],
+		"yAxis": { "domain": [2.5, 3.5], "scale": "linear" },
+		"legend": { "position": "bottom" },
+		"series": { "curveType": "monotone", "stacked": true }
 		}
-		
+
+		"yAxis", "legend", and "series" are all OPTIONAL — omit any of them (or the whole block) unless the user specifically asks for that kind of tweak:
+		- "yAxis": set when the user asks to set/change the y-axis range or scale. "domain" is a [min, max] pair of numbers. "scale" is exactly "linear" or "log".
+		- "legend": set when the user asks to move the legend. "position" is exactly one of "top", "bottom", "left", "right".
+		- "series": set when the user asks to change how lines/bars are drawn. "curveType" (LineChart/AreaChart only) is exactly one of "linear", "monotone", "step", "natural". "stacked" (BarChart/AreaChart only) is true or false.
+		Use exactly these enum values — inventing a different string means the tweak will be ignored.
+
 		IMPORTANT — When you used a tool, include a "data" array in the JSON block with the actual computed values. Each object in the array should have one
 		key for the x-axis label and one key matching yKeys[0].dataKey for the computed value — use the same field name the tool's result already used
 		(e.g. "average", "sum", "stddev", "percentile", "percentage") as that dataKey, don't rename it.
@@ -179,7 +190,11 @@ router.post('/', requireAuth, requireMembership, async (req, res) => {
   }
 
   const explanation = text.replace(/```json[\s\S]*?```/g, '').trim();
-  res.json({ explanation, config });
+  // `raw` (unstripped) is what gets persisted as this turn's chat history —
+  // stripping the JSON block before storing it means Gemini loses all memory
+  // of the chart config it generated, so follow-up "tweak" requests have
+  // nothing concrete to modify.
+  res.json({ explanation, config, raw: text });
 });
 
 export default router;

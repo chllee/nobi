@@ -130,6 +130,64 @@ function getValidationError(rows, config) {
   return null
 }
 
+// ─── optional tweak fields (yAxis / legend / series) ──────────────────────────
+// No schema enforcement exists on Gemini's chart-config JSON (see
+// visualise.js) — a malformed value here is still syntactically valid JSON,
+// so each field is validated independently and dropped (with a console.warn)
+// rather than trusted, keeping one bad field from breaking the whole render.
+
+const CURVE_TYPES = ['linear', 'monotone', 'step', 'natural']
+const LEGEND_ALIGN = {
+  top:    { verticalAlign: 'top',    align: 'center' },
+  bottom: { verticalAlign: 'bottom', align: 'center' },
+  left:   { verticalAlign: 'middle', align: 'left' },
+  right:  { verticalAlign: 'middle', align: 'right' },
+}
+
+function sanitizeChartOptions(config) {
+  const opts = { yAxis: {}, legend: {}, series: {} }
+
+  const domain = config.yAxis?.domain
+  if (Array.isArray(domain) && domain.length === 2 && domain.every(n => typeof n === 'number' && isFinite(n)) && domain[0] < domain[1]) {
+    opts.yAxis.domain = domain
+  } else if (domain !== undefined) {
+    console.warn('ChartRenderer: ignoring invalid yAxis.domain', domain)
+  }
+
+  const scale = config.yAxis?.scale
+  if (scale === 'linear' || scale === 'log') {
+    opts.yAxis.scale = scale
+    if (scale === 'log' && opts.yAxis.domain?.some(n => n <= 0)) {
+      delete opts.yAxis.domain   // log scale can't render a non-positive bound
+    }
+  } else if (scale !== undefined) {
+    console.warn('ChartRenderer: ignoring invalid yAxis.scale', scale)
+  }
+
+  const position = config.legend?.position
+  if (position in LEGEND_ALIGN) {
+    opts.legend.position = position
+  } else if (position !== undefined) {
+    console.warn('ChartRenderer: ignoring invalid legend.position', position)
+  }
+
+  const curveType = config.series?.curveType
+  if (CURVE_TYPES.includes(curveType)) {
+    opts.series.curveType = curveType
+  } else if (curveType !== undefined) {
+    console.warn('ChartRenderer: ignoring invalid series.curveType', curveType)
+  }
+
+  const stacked = config.series?.stacked
+  if (typeof stacked === 'boolean') {
+    opts.series.stacked = stacked
+  } else if (stacked !== undefined) {
+    console.warn('ChartRenderer: ignoring invalid series.stacked', stacked)
+  }
+
+  return opts
+}
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 function ChartRenderer({ config, rows }) {
@@ -148,6 +206,8 @@ function ChartRenderer({ config, rows }) {
     },
     [rows, config]
   )
+
+  const chartOptions = useMemo(() => sanitizeChartOptions(config || {}), [config])
 
   if (!config || !rows?.length) return null
 
@@ -175,11 +235,16 @@ function ChartRenderer({ config, rows }) {
       <XAxis dataKey={config.xKey} tick={{ fontSize: 12 }} angle={-35} textAnchor="end" interval="preserveStartEnd">
         {config.xLabel && <Label value={config.xLabel} offset={20} position="bottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
       </XAxis>
-      <YAxis tick={{ fontSize: 12 }}>
+      <YAxis tick={{ fontSize: 12 }} domain={chartOptions.yAxis.domain} scale={chartOptions.yAxis.scale}>
         {config.yLabel && <Label value={config.yLabel} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
       </YAxis>
       <Tooltip />
-      <Legend verticalAlign="bottom" align="center" height={36} wrapperStyle={{ paddingTop: 32 }} />
+      <Legend
+        verticalAlign={LEGEND_ALIGN[chartOptions.legend.position ?? 'bottom'].verticalAlign}
+        align={LEGEND_ALIGN[chartOptions.legend.position ?? 'bottom'].align}
+        height={36}
+        wrapperStyle={{ paddingTop: 32 }}
+      />
     </>
   )
 
@@ -188,7 +253,9 @@ function ChartRenderer({ config, rows }) {
     chart = (
       <BarChart data={data} margin={margin}>
         {axes}
-        {config.yKeys.map(y => <Bar key={y.dataKey} dataKey={y.dataKey} name={y.name} fill={y.color} />)}
+        {config.yKeys.map(y => (
+          <Bar key={y.dataKey} dataKey={y.dataKey} name={y.name} fill={y.color} stackId={chartOptions.series.stacked ? '1' : undefined} />
+        ))}
       </BarChart>
     )
   } else if (config.chartType === 'LineChart') {
@@ -196,7 +263,7 @@ function ChartRenderer({ config, rows }) {
       <LineChart data={data} margin={margin}>
         {axes}
         {config.yKeys.map(y => (
-          <Line key={y.dataKey} type="monotone" dataKey={y.dataKey} name={y.name} stroke={y.color} dot={false} />
+          <Line key={y.dataKey} type={chartOptions.series.curveType ?? 'monotone'} dataKey={y.dataKey} name={y.name} stroke={y.color} dot={false} />
         ))}
       </LineChart>
     )
@@ -205,8 +272,8 @@ function ChartRenderer({ config, rows }) {
       <AreaChart data={data} margin={margin}>
         {axes}
         {config.yKeys.map(y => (
-          <Area key={y.dataKey} type="monotone" dataKey={y.dataKey} name={y.name}
-            stroke={y.color} fill={y.color} fillOpacity={0.2} />
+          <Area key={y.dataKey} type={chartOptions.series.curveType ?? 'monotone'} dataKey={y.dataKey} name={y.name}
+            stroke={y.color} fill={y.color} fillOpacity={0.2} stackId={chartOptions.series.stacked ? '1' : undefined} />
         ))}
       </AreaChart>
     )
@@ -228,7 +295,7 @@ function ChartRenderer({ config, rows }) {
         <XAxis dataKey={config.xKey} type="number" name={config.xKey} tick={{ fontSize: 12 }}>
           {config.xLabel && <Label value={config.xLabel} offset={-5} position="insideBottom" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
         </XAxis>
-        <YAxis dataKey={config.yKeys[0].dataKey} type="number" name={config.yKeys[0].name} tick={{ fontSize: 12 }}>
+        <YAxis dataKey={config.yKeys[0].dataKey} type="number" name={config.yKeys[0].name} tick={{ fontSize: 12 }} domain={chartOptions.yAxis.domain} scale={chartOptions.yAxis.scale}>
           {config.yLabel && <Label value={config.yLabel} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fontSize: 13, fill: '#6b7280' }} />}
         </YAxis>
         <Tooltip cursor={{ strokeDasharray: '3 3' }} />

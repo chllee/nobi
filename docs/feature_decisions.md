@@ -412,6 +412,24 @@ backend/src/visualiser/
 
 ---
 
+## Milestone — Chat follow-up "tweak" bug fix + extensible chart-tweak schema (2026-07-08)
+
+### Bug fixed: follow-up tweak requests were ignored
+`visualise.js` stripped the JSON chart-config block out of the model's response before returning it as `explanation`, and the frontend persisted that stripped text as the assistant's chat message. Replayed into `startChat({ history })` on the next turn, Gemini had no memory of the chart config it had generated — a follow-up like "make it a line chart" had nothing concrete to modify, and Gemini would sometimes respond with a bare JSON block and no explanation at all (repro'd against the real Gemini API with the actual tool registry: turn 2 came back with zero prose and a silently renamed `dataKey`).
+
+**Fix:** `visualise.js` now also returns `raw` (the full unstripped model text). The frontend (`VisualisePage.jsx`) stores `raw` (falling back to `explanation` for old saved chats) as the persisted message content, so it round-trips correctly into history; the JSON block is now stripped only at render time (`displayContent()`), so the chat UI is unaffected. System prompt also gained an explicit instruction to reuse the prior JSON block's `data` on tweak-only requests instead of recomputing.
+
+### Extensible chart-tweak schema (yAxis / legend / series)
+Verifying the fix above surfaced a deeper gap: the chart config schema is a hand-enumerated JSON shape and `ChartRenderer.jsx` only renders the exact fields it was coded for — any tweak without a matching field (y-axis range, legend position, line curve, stacking) silently did nothing.
+
+**Decision:** Rather than adding one-off fields reactively, added three optional sub-objects mirroring the Recharts elements they configure — `yAxis: { domain, scale }`, `legend: { position }`, `series: { curveType, stacked }` — documented in the system prompt schema doc.
+
+**Guardrails:** Gemini's chart-config JSON has no native structured-output enforcement (`responseSchema`/`responseMimeType`) — it's a prompt convention parsed with a regex + `JSON.parse`. A bigger schema means more surface for a malformed-but-syntactically-valid value (e.g. `domain: "2.5 to 3.5"`). `ChartRenderer.jsx` now has `sanitizeChartOptions()`, which validates each of the 5 sub-fields independently (bad `domain`, invalid `scale`/`curveType`/`legend.position` enum values, non-boolean `stacked`) and drops only the invalid ones (with a `console.warn`) rather than crashing or discarding the whole config — same defensive pattern as the existing `getValidationError`.
+
+**Verified against the real Gemini API** (not just reasoned about): reproduced the user's exact scenario (2-line chart via the `pivot` tool, then "set the y-axis from 2.5 to 3.5") and confirmed the model now emits `yAxis: { domain: [2.5, 3.5], scale: "linear" }` while preserving the underlying data. Guardrail function independently verified against 13 malformed-input cases (bad domain shapes, invalid enum values, mixed valid/invalid fields) — all degrade gracefully, none throw.
+
+---
+
 ## Features Explicitly Out of Scope
 
 - Multi-org membership per user
