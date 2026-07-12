@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import supabase from '../lib/supabase.js';
 import { requireAuth, requireMembership } from '../middleware/auth.js';
-import { getDb } from '../lib/mongo.js';
+import { getDb, requireMongo } from '../lib/mongo.js';
 
 const router = Router();
 
@@ -129,7 +129,7 @@ router.get('/:id/members', requireAuth, requireMembership, async (req, res) => {
   res.json((rows || []).map(m => ({ ...m, profile: profileMap[m.user_id] || null })));
 });
 
-router.delete('/:id', requireAuth, requireMembership, async (req, res) => {
+router.delete('/:id', requireAuth, requireMembership, requireMongo, async (req, res) => {
   const { data: dept, error: fetchError } = await supabase
     .from('departments')
     .select('id, org_id, is_hq')

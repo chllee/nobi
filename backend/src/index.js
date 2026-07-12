@@ -31,13 +31,8 @@ app.use('/api/visualise', visualiseRouter);
 app.use('/api/visualisations', visualisationsRouter);
 app.use('/api/admin', adminRouter);
 
-connectMongo()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Backend running on http://localhost:${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('Failed to connect to MongoDB:', err);
-    process.exit(1);
-  });
+connectMongo();
+
+app.listen(PORT, () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
+});

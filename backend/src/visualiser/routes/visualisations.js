@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import { requireAuth, requireMembership } from '../../middleware/auth.js';
-import { getDb } from '../../lib/mongo.js';
+import { getDb, requireMongo } from '../../lib/mongo.js';
 
 const router = Router();
 
 // All routes require auth + org membership
-router.use(requireAuth, requireMembership);
+router.use(requireAuth, requireMembership, requireMongo);
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -61,17 +61,28 @@ router.post('/', async (req, res) => {
   res.status(201).json({ ...doc, _id: result.insertedId });
 });
 
-// ─── LIST (caller's saved charts, no messages/comments, for a dataset) ────────
+// ─── LIST (caller's saved analyses, no messages/comments, for a set of datasets) ──
+// Returns every analysis that touches at least one of the given dataset IDs
+// (union, not intersection) — a multi-dataset analysis shows up under any
+// one of its datasets being in scope, e.g. under the current department filter.
 router.get('/', async (req, res) => {
-  const datasetId = req.query.dataset_id;
-  if (!datasetId) {
-    return res.status(400).json({ error: 'dataset_id query parameter is required' });
+  const raw = req.query.dataset_ids;
+  const ids = typeof raw === 'string' ? raw.split(',').filter(Boolean) : [];
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'dataset_ids query parameter (comma-separated) is required' });
+  }
+
+  let oids;
+  try {
+    oids = ids.map(id => new ObjectId(id));
+  } catch {
+    return res.status(400).json({ error: 'Invalid dataset ID' });
   }
 
   const db = getDb();
   const docs = await db.collection('visualisations')
     .find({
-      dataset_ids: { $in: [new ObjectId(datasetId)] },
+      dataset_ids: { $in: oids },
       created_by: req.user.id,
       deleted_at: null,
     })

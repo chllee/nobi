@@ -4,9 +4,10 @@ import { parse } from 'csv-parse/sync';
 import { ObjectId } from 'mongodb';
 import supabase from '../lib/supabase.js';
 import { requireAuth, requireMembership } from '../middleware/auth.js';
-import { getDb } from '../lib/mongo.js';
+import { getDb, requireMongo } from '../lib/mongo.js';
 
 const router = Router();
+router.use(requireMongo);
 
 // 4MB multer cap. CSV→JSON expansion (2–5×) can approach MongoDB's
 // 16MB document limit on larger files. Revisit with chunked storage if needed.

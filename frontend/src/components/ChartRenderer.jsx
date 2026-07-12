@@ -209,7 +209,10 @@ function ChartRenderer({ config, rows }) {
 
   const chartOptions = useMemo(() => sanitizeChartOptions(config || {}), [config])
 
-  if (!config || !rows?.length) return null
+  // Pre-computed data (from a tool call) needs no raw rows to render from —
+  // required for multi-dataset analyses, where there's no single dataset's
+  // rows to fall back to.
+  if (!config || (!config.data && !rows?.length)) return null
 
   if (validationError) {
     return (

@@ -2,6 +2,7 @@ import { SchemaType } from '@google/generative-ai';
 import {
   FILTERS_PARAM_SCHEMA,
   GROUP_BY_GRANULARITY_PARAM,
+  DATASET_PARAM,
   applyFilters,
   groupRows,
   numericValues,
@@ -14,6 +15,7 @@ import {
 
 function baseProperties() {
   return {
+    dataset: DATASET_PARAM,
     agg_column: { type: SchemaType.STRING, description: 'The numeric column to aggregate (e.g. "sales")' },
     group_by_column: { type: SchemaType.STRING, description: 'Column to group by before ranking (e.g. "region", "product")' },
     group_by_granularity: GROUP_BY_GRANULARITY_PARAM,

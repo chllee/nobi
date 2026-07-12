@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/8a0072e8-962d-43e1-9fa4-788c817fc7a9
 
 5. **Upload datasets** — from the Datasets page, editors and admins select a department, choose a CSV file, and upload. The file is parsed server-side and stored in MongoDB with full row and column metadata.
 
-6. **Visualise** — navigate to the Visualise page. Select a department filter and then a dataset. Type a natural-language prompt such as "show me the top 5 countries by count" or "plot revenue over time as a line chart". The Gemini API analyses the dataset schema and sample rows, then returns a chart configuration. Recharts renders the result instantly. Follow-up prompts refine the chart in a multi-turn conversation.
+6. **Visualise** — navigate to the Visualise page. Click "+" to start a new analysis and pick one or more datasets from a checkbox picker. Type a natural-language prompt such as "show me the top 5 countries by count" or "plot revenue over time as a line chart". The Gemini API analyses the dataset schema(s) and sample rows, then returns a chart configuration via a tool-calling loop over the full dataset(s). Recharts renders the result instantly. Follow-up prompts refine the chart in a multi-turn conversation. With two or more datasets selected, you can also ask it to compare a statistic across them (e.g. "compare total revenue between these two") or join them on a shared key column (e.g. "for customers in both datasets, sum their combined order value").
 
 7. **Admin panel** — platform admins access `/admin` to view platform-wide stats (total orgs, users, datasets), list all organisations, toggle platform admin status for any user, and delete organisations with cascading cleanup in both Postgres and MongoDB.
 
@@ -163,6 +163,8 @@ The prompt described the desired access model entirely in business and user term
 | Backend permission enforcement | Hard backend guards via `user_can()` on every protected endpoint. Earlier phases used soft UI-only blocks; all replaced with explicit per-action checks in Phase 8 |
 | Signup trigger | Creates only a profile (no auto-org). Users choose to create an org or accept an invite during onboarding — removes confusion for invited users who should join an existing org |
 | Platform admin layer | `is_platform_admin` flag on profiles, independent of org membership. `/api/admin/` routes gated by `requirePlatformAdmin` middleware |
+| Mongo startup resilience | Non-fatal, self-retrying Mongo connection (10s interval) plus a `requireMongo` guard on Mongo-only routes, instead of hard-crashing the entire API (including unrelated Postgres routes) when only MongoDB Atlas is unreachable |
+| Cross-dataset analysis tool design | Reused every existing aggregation tool via an optional `dataset` param (Gemini calls the same tool once per dataset for comparisons) rather than building comparison-specific tools; added one dedicated `join_and_aggregate` tool for genuine row-level joins rather than a join variant of every existing tool |
 
 ---
 
@@ -235,8 +237,9 @@ Both the backend (port 3001) and frontend (port 5173) start concurrently. The ap
 | **Invite a team member** | Departments → Members on a department → search by name or email → select a role → click Invite |
 | **Accept an invitation** | Navigate to Invitations, click Accept on the pending invite |
 | **Upload a dataset** | Navigate to Datasets, select the target department, choose a CSV file (max 4 MB), click Upload |
-| **Visualise data** | Navigate to Visualise, select a department and dataset, type a natural-language prompt, press Enter or Send |
+| **Visualise data** | Navigate to Visualise, click "+", pick one or more datasets, type a natural-language prompt, press Enter or Send |
 | **Refine a chart** | Type a follow-up prompt in the same chat panel — conversation history is maintained across turns |
+| **Compare or join datasets** | With 2+ datasets selected for an analysis, ask a comparison question ("compare X between these") or a join question ("for records present in both, sum X grouped by Y") |
 | **Manage member permissions** | Departments → Members → change role or toggle extra permissions checkboxes |
 | **Remove a member / leave a department** | Departments → Members → Remove (for managers) or Leave (for self) |
 | **Admin panel** | Navigate to Admin (platform admins only) to view stats, manage organisations and users |
@@ -273,7 +276,7 @@ repo/
 │           ├── OnboardingPage.jsx    # Org creation or invite acceptance; waiting-room mode
 │           ├── DashboardPage.jsx     # Dataset count, membership count, last upload date
 │           ├── DatasetsPage.jsx      # CSV upload, dataset list, client-side search, delete
-│           ├── VisualisePage.jsx     # Department + dataset selector, NL chat panel, chart panel
+│           ├── VisualisePage.jsx     # Department filter, dataset picker for new analyses, NL chat panel, chart panel
 │           ├── DepartmentsPage.jsx   # Department CRUD (HQ admins only)
 │           ├── MembersPage.jsx       # Per-department member list, role editing, invite management
 │           ├── InvitationsPage.jsx   # Incoming invitation inbox (accept / reject)
@@ -282,21 +285,33 @@ repo/
 ├── backend/                  # Express API server (port 3001)
 │   ├── package.json
 │   └── src/
-│       ├── index.js          # Server entry point, CORS, route mounting, MongoDB connect
+│       ├── index.js          # Server entry point, CORS, route mounting, background MongoDB connect
 │       ├── lib/
 │       │   ├── supabase.js   # Supabase service-role client (bypasses RLS)
-│       │   └── mongo.js      # MongoDB connection singleton
+│       │   └── mongo.js      # MongoDB connection singleton — non-fatal, self-retrying; requireMongo guard
 │       ├── middleware/
 │       │   └── auth.js       # JWT validation, org + role lookup, isPlatformAdmin attach
-│       └── routes/
-│           ├── organisations.js  # POST /api/organisations, GET /api/organisations/me
-│           ├── departments.js    # CRUD /api/departments, GET /api/departments/:id/members
-│           ├── memberships.js    # PATCH/DELETE /api/memberships/:id
-│           ├── invitations.js    # Invite CRUD, accept/reject actions, department invite list
-│           ├── users.js          # GET /api/users/search
-│           ├── datasets.js       # Upload, list, get by id, delete (MongoDB-backed)
-│           ├── visualise.js      # POST /api/visualise — Gemini chat, model fallback chain
-│           └── admin.js          # Platform admin routes (stats, org/user management)
+│       ├── routes/
+│       │   ├── organisations.js  # POST /api/organisations, GET /api/organisations/me
+│       │   ├── departments.js    # CRUD /api/departments, GET /api/departments/:id/members
+│       │   ├── memberships.js    # PATCH/DELETE /api/memberships/:id
+│       │   ├── invitations.js    # Invite CRUD, accept/reject actions, department invite list
+│       │   ├── users.js          # GET /api/users/search
+│       │   ├── datasets.js       # Upload, list, get by id, delete (MongoDB-backed)
+│       │   └── admin.js          # Platform admin routes (stats, org/user management)
+│       └── visualiser/
+│           ├── routes/
+│           │   ├── visualise.js      # POST /api/visualise — Gemini chat, tool-calling loop, model fallback chain
+│           │   └── visualisations.js # Saved-analysis CRUD, dataset_ids-scoped listing
+│           └── toolRegistry/
+│               ├── registry.js       # Auto-discovers tool files; dispatch() resolves per-dataset rows
+│               ├── basic_math.js     # sum, average, median, count, min, max
+│               ├── statistics.js     # stddev, percentile, mode
+│               ├── ranking.js        # top/bottom N, percentage of total
+│               ├── pivot.js          # multi-series grouping (one tool call, not N)
+│               ├── join.js           # join_and_aggregate — inner-join two datasets by a shared key
+│               └── shared/
+│                   └── aggregationHelpers.js  # filters, date bucketing, reducers, multi-dataset row resolution
 │
 ├── supabase/
 │   └── schema.sql            # Full Postgres schema: tables, RLS, functions, trigger

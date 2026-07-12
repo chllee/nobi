@@ -137,6 +137,58 @@ const NavEmpty = styled.p`
   margin: 0;
 `
 
+const PickerPanel = styled.div`
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f9fafb;
+`
+
+const PickerTitle = styled.span`
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+`
+
+const PickerList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+`
+
+const PickerCheckboxRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+`
+
+const PickerActions = styled.div`
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+`
+
+const PickerButton = styled.button`
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid ${p => p.$primary ? 'transparent' : '#d1d5db'};
+  background: ${p => p.$primary ? '#facc15' : '#fff'};
+  color: ${p => p.$primary ? '#1a1a1a' : '#374151'};
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { background: ${p => p.$primary ? '#eab308' : '#f3f4f6'}; }
+`
+
 const Panel = styled.div`
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -546,14 +598,23 @@ export default function VisualisePage() {
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState(null)
   const [commentDraft, setCommentDraft] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerSelection, setPickerSelection] = useState([])
+  // Per-dataset raw rows, keyed by dataset id — needed because a single-dataset
+  // analysis's chart can fall back to raw rows (when Gemini didn't use a tool),
+  // and that analysis's own dataset isn't necessarily the one currently shown
+  // in the preview dropdown now that the nav list isn't gated by it.
+  const [datasetRowsCache, setDatasetRowsCache] = useState({})
 
   // Reset comment draft when switching to a different chart
   useEffect(() => { setCommentDraft('') }, [activeChartId])
   const chatBottomRef = useRef(null)
   const chartRefs = useRef({})
+  const rowsFetchingRef = useRef(new Set())
 
   const activeChart = charts.find(c => c.id === activeChartId) || null
-  const visibleCharts = charts.filter(c => c.datasetId === selectedId)
+  const scopedDatasetIds = new Set(datasets.map(d => d.id))
+  const visibleCharts = charts.filter(c => c.datasetIds.some(id => scopedDatasetIds.has(id)))
 
   // ─── load departments once ────────────────────────────────────────────────
 
@@ -572,7 +633,66 @@ export default function VisualisePage() {
     setDatasetColumns(null)
     setDatasetRowCount(0)
     setShowPreview(true)
+    setCharts([])
+    setPickerOpen(false)
   }, [deptFilter])
+
+  // ─── load saved analyses whenever the department-scoped dataset list changes ──
+  // An analysis is visible if it touches ANY dataset currently in scope, not
+  // gated by a single "selected" dataset — so this loads for the whole scope
+  // rather than being tied to the preview dropdown.
+
+  useEffect(() => {
+    if (datasets.length === 0) return
+    const ids = datasets.map(d => d.id).join(',')
+    apiFetch(`/api/visualisations?dataset_ids=${ids}`)
+      .then(savedCharts => {
+        setCharts(prev => {
+          const existingIds = new Set(prev.filter(c => c._id).map(c => c._id))
+          const newFromServer = (savedCharts || [])
+            .filter(doc => !existingIds.has(doc._id))
+            .map(doc => ({
+              id: doc._id,
+              _id: doc._id,
+              datasetIds: (doc.dataset_ids || []).map(String),
+              title: doc.title || null,
+              titleEditedByUser: false,
+              messages: [],    // loaded lazily
+              config: doc.config || null,
+              comments: [],    // loaded lazily
+              sending: false,
+              saving: false,
+              error: null,
+              dirty: false,
+              loaded: false,   // full details not yet fetched
+            }))
+          return newFromServer.length > 0 ? [...prev, ...newFromServer] : prev
+        })
+      })
+      .catch(() => {})
+  }, [datasets])
+
+  // ─── lazily fetch raw rows for each single-dataset analysis's own dataset ──
+  // (the raw-rows chart-render fallback needs the analysis's dataset, not
+  // whatever the preview dropdown happens to be showing).
+
+  useEffect(() => {
+    const scoped = new Set(datasets.map(d => d.id))
+    const needed = new Set()
+    charts.forEach(c => {
+      if (c.datasetIds.length === 1 && scoped.has(c.datasetIds[0])) {
+        needed.add(c.datasetIds[0])
+      }
+    })
+    needed.forEach(id => {
+      if (datasetRowsCache[id] || rowsFetchingRef.current.has(id)) return
+      rowsFetchingRef.current.add(id)
+      apiFetch(`/api/datasets/${id}`)
+        .then(d => setDatasetRowsCache(prev => ({ ...prev, [id]: d.rows })))
+        .catch(() => {})
+        .finally(() => rowsFetchingRef.current.delete(id))
+    })
+  }, [charts, datasets, datasetRowsCache])
 
   // ─── scroll chat to bottom on new messages ────────────────────────────────
 
@@ -585,8 +705,6 @@ export default function VisualisePage() {
   async function handleDatasetChange(e) {
     const id = e.target.value
     setSelectedId(id)
-    setActiveChartId(null)
-    setPrompt('')
     setDatasetRows(null)
     setDatasetColumns(null)
     setDatasetRowCount(0)
@@ -596,44 +714,11 @@ export default function VisualisePage() {
     if (!id) return
 
     try {
-      const [d, savedCharts] = await Promise.all([
-        apiFetch(`/api/datasets/${id}`),
-        apiFetch(`/api/visualisations?dataset_id=${id}`).catch(() => []),
-      ])
+      const d = await apiFetch(`/api/datasets/${id}`)
       setDatasetRows(d.rows)
       setDatasetColumns(d.columns)
       setDatasetRowCount(d.row_count)
-
-      // Merge saved charts with existing in-memory charts (keep unsaved ones).
-      // Charts already in state by _id are not duplicated.
-      const existingIds = new Set()
-      setCharts(prev => {
-        // Build set of server IDs already in state
-        prev.forEach(c => { if (c._id) existingIds.add(c._id) })
-        return prev  // keep all existing charts
-      })
-
-      // Add any saved charts from the server that aren't already in state
-      const newFromServer = (savedCharts || [])
-        .filter(doc => !existingIds.has(doc._id))
-        .map(doc => ({
-          id: doc._id,
-          _id: doc._id,
-          datasetId: id,
-          title: doc.title || null,
-          titleEditedByUser: false,
-          messages: [],    // loaded lazily
-          config: doc.config || null,
-          comments: [],    // loaded lazily
-          sending: false,
-          saving: false,
-          error: null,
-          dirty: false,
-          loaded: false,   // full details not yet fetched
-        }))
-      if (newFromServer.length > 0) {
-        setCharts(prev => [...prev, ...newFromServer])
-      }
+      setDatasetRowsCache(prev => ({ ...prev, [id]: d.rows }))
     } catch (err) {
       setError(err.message)
     }
@@ -664,15 +749,28 @@ export default function VisualisePage() {
     chartRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [charts, updateChart])
 
-  // ─── add a new (unsaved) chart locally ────────────────────────────────────
+  // ─── new analysis: pick datasets, then create ─────────────────────────────
 
-  function addChart() {
-    if (!selectedId) return
+  function openPicker() {
+    setPickerSelection(selectedId ? [selectedId] : [])
+    setPickerOpen(true)
+  }
+
+  function cancelPicker() {
+    setPickerOpen(false)
+  }
+
+  function togglePickerDataset(id) {
+    setPickerSelection(sel => sel.includes(id) ? sel.filter(x => x !== id) : [...sel, id])
+  }
+
+  function confirmCreateAnalysis() {
+    if (pickerSelection.length === 0) return
     const id = crypto.randomUUID()
     setCharts(cs => [...cs, {
       id,
       _id: null,
-      datasetId: selectedId,
+      datasetIds: pickerSelection,
       title: null,
       titleEditedByUser: false,
       messages: [],
@@ -682,10 +780,11 @@ export default function VisualisePage() {
       saving: false,
       error: null,
       dirty: false,
-      loaded: true,   // new charts have no server data to load
+      loaded: true,   // new analyses have no server data to load
     }])
     setActiveChartId(id)
     setPrompt('')
+    setPickerOpen(false)
   }
 
   // ─── delete chart (server + local) ────────────────────────────────────────
@@ -728,7 +827,7 @@ export default function VisualisePage() {
       const { explanation, config, raw } = await apiFetch('/api/visualise', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasetId: chart.datasetId, messages: nextMessages }),
+        body: JSON.stringify({ datasetIds: chart.datasetIds, messages: nextMessages }),
       })
       updateChart(chart.id, c => ({
         // store the raw response (chart-config JSON block included) so it
@@ -790,7 +889,7 @@ export default function VisualisePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            dataset_ids: [chart.datasetId],
+            dataset_ids: chart.datasetIds,
             title: chart.title,
             config: chart.config,
             messages: chart.messages,
@@ -916,11 +1015,9 @@ export default function VisualisePage() {
           <InputArea>
             <Textarea
               placeholder={
-                !selectedId
-                  ? 'Select a dataset first'
-                  : !activeChart
-                    ? 'Click "+" to start a new chart'
-                    : 'Ask to visualise your data… (Enter to send)'
+                !activeChart
+                  ? (noDatasets ? 'Upload a dataset first' : 'Click "+" to start a new analysis')
+                  : 'Ask to visualise your data… (Enter to send)'
               }
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
@@ -1024,7 +1121,10 @@ export default function VisualisePage() {
                     </ChartCardHeader>
 
                     {chart.config
-                      ? <ChartRenderer config={{ ...chart.config, title: undefined }} rows={datasetRows} />
+                      ? <ChartRenderer
+                          config={{ ...chart.config, title: undefined }}
+                          rows={chart.datasetIds.length === 1 ? (datasetRowsCache[chart.datasetIds[0]] || []) : []}
+                        />
                       : <Placeholder>{chart.sending ? 'Generating chart…' : 'Ask a question in the chat panel to generate this chart'}</Placeholder>}
 
                     {/* Comments section — visible when active or when there are comments */}
@@ -1068,11 +1168,11 @@ export default function VisualisePage() {
           {showEmptyPlaceholder && (
             <ChartCard $empty>
               <Placeholder>
-                {!selectedId
-                  ? 'Select a dataset to get started'
+                {noDatasets
+                  ? 'Upload a dataset to get started'
                   : !hasPreviewData
-                    ? 'Click "+" to start your first chart'
-                    : 'Preview hidden — click "+" to start a chart, or show the preview again'}
+                    ? 'Click "+" to start your first analysis'
+                    : 'Preview hidden — click "+" to start an analysis, or show the preview again'}
               </Placeholder>
             </ChartCard>
           )}
@@ -1080,12 +1180,37 @@ export default function VisualisePage() {
 
         <NavSidebar>
           <NavHeader>
-            <NavHeaderTitle>Charts</NavHeaderTitle>
-            <AddButton type="button" onClick={addChart} disabled={!selectedId} title="New chart">+</AddButton>
+            <NavHeaderTitle>Analyses</NavHeaderTitle>
+            <AddButton type="button" onClick={openPicker} disabled={noDatasets} title="New analysis">+</AddButton>
           </NavHeader>
+
+          {pickerOpen && (
+            <PickerPanel onClick={e => e.stopPropagation()}>
+              <PickerTitle>Select dataset(s) for this analysis</PickerTitle>
+              <PickerList>
+                {datasets.map(d => (
+                  <PickerCheckboxRow key={d.id}>
+                    <input
+                      type="checkbox"
+                      checked={pickerSelection.includes(d.id)}
+                      onChange={() => togglePickerDataset(d.id)}
+                    />
+                    {d.name}
+                  </PickerCheckboxRow>
+                ))}
+              </PickerList>
+              <PickerActions>
+                <PickerButton type="button" onClick={cancelPicker}>Cancel</PickerButton>
+                <PickerButton type="button" $primary onClick={confirmCreateAnalysis} disabled={pickerSelection.length === 0}>
+                  Create
+                </PickerButton>
+              </PickerActions>
+            </PickerPanel>
+          )}
+
           <NavList>
             {visibleCharts.length === 0
-              ? <NavEmpty>No charts yet</NavEmpty>
+              ? <NavEmpty>No analyses yet</NavEmpty>
               : visibleCharts.map(c => (
                   <NavItemRow key={c.id} $active={c.id === activeChartId}>
                     <NavItemButton

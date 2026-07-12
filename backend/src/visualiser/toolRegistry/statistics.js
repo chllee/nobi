@@ -2,6 +2,7 @@ import { SchemaType } from '@google/generative-ai';
 import {
   FILTERS_PARAM_SCHEMA,
   GROUP_BY_GRANULARITY_PARAM,
+  DATASET_PARAM,
   applyFilters,
   groupRows,
   numericValues,
@@ -9,6 +10,7 @@ import {
 
 function commonProperties() {
   return {
+    dataset: DATASET_PARAM,
     agg_column: {
       type: SchemaType.STRING,
       description: 'The column to analyse (e.g. "sales", "age")',

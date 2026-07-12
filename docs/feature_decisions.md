@@ -430,6 +430,47 @@ Verifying the fix above surfaced a deeper gap: the chart config schema is a hand
 
 ---
 
+## Milestone — MongoDB startup resilience (2026-07-12)
+
+### Why
+`backend/src/index.js` gated the *entire* Express server behind a successful Mongo connection — it called `connectMongo()` and only called `app.listen()` in the `.then()`, with `process.exit(1)` on failure. That killed every route, including the Postgres-only ones (auth, orgs, departments, memberships, invitations, users) that have nothing to do with Mongo. This caused two real incidents — a live demo on 2026-05-19 and again on 2026-07-08 — where a firewalled network blocking outbound Atlas traffic took down the whole API instead of just the dataset/visualise features.
+
+### Fix
+- `backend/src/lib/mongo.js`: `connectMongo()` no longer throws upward on failure — it logs once and retries on a fixed 10s interval in the background. New `isMongoConnected()` export and a `requireMongo` middleware that returns a clean `503 { error: 'Database temporarily unavailable' }` if Mongo isn't connected yet.
+- `backend/src/index.js`: `app.listen()` now runs unconditionally; `connectMongo()` is kicked off in the background instead of gating startup.
+- `requireMongo` applied to the 5 route files that actually touch Mongo (`datasets.js`, `visualise.js`, `visualisations.js`, one handler in `departments.js`, two routes in `admin.js`). This also fixed a related latent bug: those routes called `getDb()` with no guard and no try/catch, so a mid-request Mongo failure produced an unhandled promise rejection — the request just hung with no response, rather than erroring cleanly.
+
+### Verified live
+Started the backend against an unreachable Mongo host (a TEST-NET-1 address, guaranteed unroutable) — the process stayed up, `/api/health` returned 200, a Mongo-backed route returned a clean `503` instantly instead of hanging, and Postgres-backed routes worked normally. Confirmed the background retry fires every ~10s from log output. Restarted against the real Mongo URI without any code changes and confirmed the same route falls through to normal behaviour with no regression.
+
+---
+
+## Milestone — Cross-dataset analysis (2026-07-12)
+
+### Why
+The multi-chart redesign (2026-07-07) stored `dataset_ids` as an array on every persisted chart specifically to support analysing across multiple datasets later (see that milestone's note above) — that capability was deferred until now. Until this change, the "+" button only ever created a chart bound to a single dataset, and `POST /api/visualise` only accepted one `datasetId`.
+
+### UX change
+The "+" button now opens a dataset picker (checkboxes over the department-scoped dataset list) instead of immediately creating a chart bound to whatever the preview dropdown had selected. An analysis is still 1:1 with a chart (not a new grouping level above it) but now carries `datasetIds: string[]`. The nav sidebar list is no longer gated by a single "selected" dataset — it shows every analysis whose datasets intersect the current department filter. The dataset preview dropdown is now purely a "peek at one dataset's raw rows" convenience, decoupled from analysis visibility/creation.
+
+### Backend / tool registry
+- `POST /api/visualise` takes `datasetIds` (array, replacing the singular `datasetId` — both frontend and backend changed together, no back-compat shim). Fetches all requested datasets in one query, builds a `{ [displayName]: rows }` map (dataset names de-duped via a `uniqueName` helper for datasets sharing a filename), and the system prompt lists each dataset separately with its own sample rows.
+- **Dataset-tagged tool reuse (chosen over a join-first approach — see trade-off below)**: every existing tool (`basic_math`, `statistics`, `ranking`, `pivot`) gained an optional `dataset` param, free-text like the existing column-name params rather than an enum. `registry.js`'s `dispatch()` resolves which dataset's rows to pass via a new `resolveDatasetRows()` helper in `aggregationHelpers.js`: with a single dataset in scope it auto-resolves regardless of the arg (fully back-compatible with every existing single-dataset chart), with 2+ datasets the arg is required, and an unknown/missing name is fed back to Gemini as the tool's own error result — not a thrown exception that kills the request — so it can self-correct within the existing multi-turn tool loop.
+- **New join tool** (`toolRegistry/join.js`): `join_and_aggregate` — one tool, not a family of join variants. Inner-joins two datasets on a shared key column (`left_dataset`/`left_key_column`/`right_dataset`/`right_key_column`), then aggregates via a `reducer` enum reusing the existing `REDUCERS` map. Rows with no match on either side are dropped; `matched_rows` is returned alongside the aggregate so a bad join (e.g. mismatched key formats) is visible as a suspiciously low match count rather than silently hidden.
+
+### Bugs caught by live verification (not visible from reading the code — see [[feedback_verify_dont_assert]] pattern)
+1. The new `multiDataset` flag on the join tool object leaked into the Gemini-facing function schema (`functionDeclarations` only stripped `execute`, not this new field) and got the *entire* tool list rejected by the Gemini API with a 400 the moment `join.js` existed. Fixed by stripping both fields.
+2. Gemini occasionally merged two per-dataset tool-call results into one JSON object with duplicate keys instead of two separate array entries (e.g. `{"dataset":"Q1","revenue":3300,"dataset":"Q2","revenue":4500}`) when asked to compare datasets. This is syntactically valid JSON — the second duplicate key silently overwrites the first on parse — so it produced no error anywhere, just a chart missing a bar. This is exactly the "implicit model reasoning to merge results" risk that was flagged as a trade-off when choosing dataset-tagged reuse over a join-first design. Fixed by adding an explicit right/wrong example to the system prompt's multi-dataset section; reran the live comparison prompt 5x afterward with zero further collapses.
+3. `ChartRenderer.jsx` had a latent early-return — `if (!config || !rows?.length) return null` — that unconditionally required non-empty raw rows even when `config.data` was already pre-computed by a tool call. Harmless under the old single-dataset design (a chart could never exist without its dataset's rows being loaded), but multi-dataset analyses correctly pass empty raw rows (there's no single dataset to fall back to), which hit this guard and silently rendered nothing — with a fully correct chart config and zero console errors. Fixed by short-circuiting on `config.data` presence, matching how the rest of the component already special-cased it two lines above.
+
+### Verified live
+Real headless-browser run (Playwright, throwaway test account explicitly authorized for this) through the actual UI: signup → onboarding → org creation → CSV upload (two files) → Visualise page → "+" opens the picker → multi-select both datasets → Create → cross-dataset comparison chart renders correctly with real computed values → single-dataset analyses confirmed still working unchanged, no console errors. The join tool and dataset-dispatch logic were additionally verified directly against the real Gemini API and real tool-registry code (bypassing the browser) before the UI pass. Test accounts, orgs, and datasets created during verification were cleaned up afterward via a script using the Supabase admin API (cascading delete) and the Mongo driver directly.
+
+### Correction to earlier scope note
+"Single dataset per visualisation" and "Multi-dataset joins/pivots flagged as future work" (Phase 5 & 6 decisions, above) are now superseded — multi-dataset analyses and a dedicated join tool are implemented as of this milestone.
+
+---
+
 ## Features Explicitly Out of Scope
 
 - Multi-org membership per user

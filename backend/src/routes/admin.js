@@ -1,19 +1,19 @@
 import { Router } from 'express';
 import supabase from '../lib/supabase.js';
-import { connectMongo } from '../lib/mongo.js';
+import { getDb, requireMongo } from '../lib/mongo.js';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth, requirePlatformAdmin);
 
 // Overview stats
-router.get('/overview', async (_req, res) => {
+router.get('/overview', requireMongo, async (_req, res) => {
   const [{ count: orgCount }, { count: userCount }] = await Promise.all([
     supabase.from('organisations').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
   ]);
 
-  const db = await connectMongo();
+  const db = getDb();
   const datasetCount = await db.collection('datasets')
     .countDocuments({ deleted_at: { $exists: false } });
 
@@ -94,7 +94,7 @@ router.patch('/users/:id/admin', async (req, res) => {
 });
 
 // Delete an organisation and all its data
-router.delete('/organisations/:id', async (req, res) => {
+router.delete('/organisations/:id', requireMongo, async (req, res) => {
   const orgId = req.params.id;
 
   // Get all department IDs for this org so we can wipe MongoDB datasets
@@ -105,7 +105,7 @@ router.delete('/organisations/:id', async (req, res) => {
   const deptIds = (depts || []).map(d => d.id);
 
   if (deptIds.length > 0) {
-    const db = await connectMongo();
+    const db = getDb();
     await db.collection('datasets').deleteMany({ department_id: { $in: deptIds } });
   }
 

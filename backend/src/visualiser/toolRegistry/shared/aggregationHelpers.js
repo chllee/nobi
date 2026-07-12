@@ -65,6 +65,15 @@ export const GROUP_BY_GRANULARITY_PARAM = {
   description: 'Optional granularity to bucket a date-like group_by_column into (e.g. "month" turns daily dates into monthly buckets). Only applies if group_by_column is set.',
 };
 
+// Free-text (not enum) so it follows the same convention as agg_column/
+// group_by_column — validated against the actual dataset names at execute
+// time via resolveDatasetRows(), with the mismatch fed back to Gemini as a
+// tool error it can self-correct from, rather than baked into the schema.
+export const DATASET_PARAM = {
+  type: SchemaType.STRING,
+  description: 'Which dataset this applies to — must exactly match one of the dataset names listed in the system instruction. Required only when more than one dataset is available; omit if there is only one.',
+};
+
 // Returns the raw value unchanged if it isn't a parseable date, or no
 // granularity was requested — callers fall back to the current "group by
 // raw string value" behaviour.
@@ -133,3 +142,23 @@ export const REDUCERS = {
   min:     values => values.length ? Math.min(...values) : 0,
   max:     values => values.length ? Math.max(...values) : 0,
 };
+
+// ─── multi-dataset resolution ─────────────────────────────────────────────────
+
+// Shared by registry.js (single-dataset tools) and join.js (which resolves
+// both sides itself). When only one dataset is in scope, `datasetName` is
+// optional and the sole dataset is used regardless — keeps every existing
+// single-dataset tool call working unchanged. Once 2+ datasets are in scope,
+// a name is required and must match one of them exactly (case-insensitive).
+export function resolveDatasetRows(rowsByDataset, datasetName) {
+  const names = Object.keys(rowsByDataset);
+  if (!datasetName) {
+    if (names.length === 1) return rowsByDataset[names[0]];
+    throw new Error(`Multiple datasets are selected — the "dataset" parameter is required (one of: ${names.join(', ')})`);
+  }
+  const match = names.find(n => n.toLowerCase() === datasetName.toLowerCase());
+  if (!match) {
+    throw new Error(`Unknown dataset "${datasetName}" — must be one of: ${names.join(', ')}`);
+  }
+  return rowsByDataset[match];
+}
